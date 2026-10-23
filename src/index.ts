@@ -52,7 +52,10 @@ export {
   policyConflicts,
   readPackageJson,
   readProjectDeps,
+  type CapabilityDeclaration,
+  type CustomCapability,
   type DepsPolicy,
+  type FingerprintOverride,
   type ProjectDeps,
 } from './engine/deps.js'
 export { createRule, RuleDefinitionError } from './engine/rule.js'

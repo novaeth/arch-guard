@@ -1,6 +1,6 @@
 import { existsSync, readFileSync } from 'node:fs'
 
-import type { WheelFingerprint } from '../data/wheel-fingerprints.js'
+import { wheelFingerprints, type WheelFingerprint } from '../data/wheel-fingerprints.js'
 import { builtinModules } from 'node:module'
 import { join } from 'node:path'
 
@@ -64,10 +64,45 @@ export interface FingerprintOverride {
   hint?: string
 }
 
+/**
+ * **自定义能力**（R-154）：`deps({ capabilities })` 的对象形态。
+ *
+ * 内置能力由 `data/wheel-fingerprints.ts` 提供证据；宿主自己那套（企业请求层 / 事件总线 / 内部库）
+ * 没有内置条目，就用对象形态把「首选方案 + 证据 + 推荐写法」一次说完。
+ * 落进生效表后与内置能力同形，P06 / P07 不区分来源。
+ */
+export interface CustomCapability {
+  /** 首选方案（包名，或 `platform: true` 时的平台内置 API 名） */
+  preferred: string
+  /** 强指纹：单证据即报（形态无歧义） */
+  syntax?: string[]
+  /** 弱指纹：需与 `apiNames` 叠加（P07 的两类证据） */
+  softSyntax?: string[]
+  /** 该能力的常见公开 API 名（命名指纹，大小写不敏感） */
+  apiNames?: string[]
+  /** 平台内置：没有 import 可查 → 命中即报，且不要求出现在 `allow` 里 */
+  platform?: boolean
+  /** 允许项目自研：P06 降级为 warn */
+  allowOwn?: boolean
+  /** 报错时给的可执行写法 */
+  hint: string
+  note?: string
+}
+
+/** `capabilities` 的值：字符串 = 只声明首选（证据沿用内置表）；对象 = 连证据一起登记 */
+export type CapabilityDeclaration = string | CustomCapability
+
 export interface DepsPolicy {
   allow: string[]
   deny: string[]
   capabilities: Record<string, string>
+  /**
+   * 自定义能力的完整定义（与内置表同形）。
+   *
+   * 为什么和 `capabilities` 分开放：下游（P06 / P07 / 文档）要的仍然是「能力 → 首选方案」这张简单表；
+   * 指纹证据只在构造生效表时用。两份数据由 `parseCapabilities` 从同一个对象一次拆出，不会各写一半。
+   */
+  customCapabilities: WheelFingerprint[]
   fingerprints: FingerprintOverride[]
 }
 
@@ -176,18 +211,162 @@ function overridesFrom(value: unknown): FingerprintOverride[] {
   return out
 }
 
-export function depsPolicyFrom(params: Record<string, unknown>): DepsPolicy {
-  const rawCapabilities = params.capabilities
-  const capabilities: Record<string, string> = {}
-  if (rawCapabilities && typeof rawCapabilities === 'object' && !Array.isArray(rawCapabilities)) {
-    for (const [key, value] of Object.entries(rawCapabilities as Record<string, unknown>)) {
-      if (typeof value === 'string') capabilities[key] = value
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+const BUILTIN_CAPABILITY_NAMES = new Set(wheelFingerprints.map((entry) => entry.capability))
+
+function readStringArray(
+  raw: Record<string, unknown>,
+  field: string,
+  capability: string,
+  problems: string[],
+): string[] {
+  const value = raw[field]
+  if (value === undefined) return []
+  if (!Array.isArray(value) || value.some((item) => typeof item !== 'string')) {
+    problems.push(`自定义能力「${capability}」的 ${field} 必须是字符串数组`)
+    return []
+  }
+  return value as string[]
+}
+
+function checkPatterns(
+  capability: string,
+  field: string,
+  patterns: readonly string[],
+  problems: string[],
+): void {
+  for (const pattern of patterns) {
+    try {
+      new RegExp(pattern)
+    } catch {
+      problems.push(
+        `自定义能力「${capability}」的 ${field} 里「${pattern}」不是合法正则 —— 这条证据永远不会命中`,
+      )
     }
+  }
+}
+
+interface ParsedCapability {
+  preferred?: string
+  fingerprint?: WheelFingerprint
+  problems: string[]
+}
+
+/**
+ * 解析一个能力声明。字符串形态（老写法）只取首选方案；对象形态顺便校验证据。
+ *
+ * 非字符串、非对象的值保持**历史行为**：直接忽略（`depsPolicyFrom` 的调用方可能是旧配置）。
+ * 对象形态是新契约，写错了不忽略 —— 由调用方决定抛错（`deps()` / `depsPolicyFrom`）。
+ */
+function parseCapability(name: string, value: unknown): ParsedCapability {
+  const problems: string[] = []
+  if (typeof value === 'string') {
+    if (value.trim() === '') problems.push(`能力「${name}」的首选方案不能为空`)
+    return { preferred: value, problems }
+  }
+  if (!isPlainObject(value)) return { problems }
+
+  if (BUILTIN_CAPABILITY_NAMES.has(name)) {
+    problems.push(
+      `「${name}」是内置能力，不能用对象形态重新定义；改它的证据请用 deps({ fingerprints: [...] })`,
+    )
+  }
+
+  const preferred = value.preferred
+  if (typeof preferred !== 'string' || preferred.trim() === '') {
+    problems.push(`自定义能力「${name}」的 preferred 必须是非空字符串（这个能力必须用哪个方案）`)
+  }
+  const hint = typeof value.hint === 'string' ? value.hint : ''
+  if (hint.trim() === '') {
+    problems.push(`自定义能力「${name}」缺 hint：报错必须告诉人怎么改（写成可粘贴的写法）`)
+  }
+
+  const syntax = readStringArray(value, 'syntax', name, problems)
+  const softSyntax = readStringArray(value, 'softSyntax', name, problems)
+  const apiNames = readStringArray(value, 'apiNames', name, problems)
+  checkPatterns(name, 'syntax', syntax, problems)
+  checkPatterns(name, 'softSyntax', softSyntax, problems)
+
+  if (syntax.length === 0) {
+    if (softSyntax.length === 0) {
+      problems.push(`自定义能力「${name}」没有任何指纹：至少给 syntax，或 softSyntax + apiNames`)
+    } else if (apiNames.length === 0) {
+      problems.push(`自定义能力「${name}」只有 softSyntax：P07 需要弱指纹 + apiNames 两类证据`)
+    }
+  } else if (softSyntax.length > 0 && apiNames.length === 0) {
+    problems.push(
+      `自定义能力「${name}」的 softSyntax 没有 apiNames 配对 —— P07 永远读不到这条命名证据`,
+    )
+  }
+  if (apiNames.length > 0 && softSyntax.length === 0) {
+    problems.push(`自定义能力「${name}」的 apiNames 没有 softSyntax 配对 —— 只有命名证据不会命中`)
+  }
+
+  if (value.platform !== undefined && typeof value.platform !== 'boolean') {
+    problems.push(`自定义能力「${name}」的 platform 必须是布尔值`)
+  }
+  if (value.allowOwn !== undefined && typeof value.allowOwn !== 'boolean') {
+    problems.push(`自定义能力「${name}」的 allowOwn 必须是布尔值`)
+  }
+  if (value.note !== undefined && typeof value.note !== 'string') {
+    problems.push(`自定义能力「${name}」的 note 必须是字符串`)
+  }
+
+  if (problems.length > 0 || typeof preferred !== 'string') return { problems }
+
+  const fingerprint: WheelFingerprint = {
+    capability: name,
+    preferred: [preferred],
+    hint,
+    ...(syntax.length > 0 ? { syntax } : {}),
+    ...(softSyntax.length > 0 ? { softSyntax } : {}),
+    ...(apiNames.length > 0 ? { apiNames } : {}),
+    ...(value.platform === true ? { platform: true } : {}),
+    ...(value.allowOwn === true ? { allowOwn: true } : {}),
+    ...(typeof value.note === 'string' && value.note !== '' ? { note: value.note } : {}),
+  }
+  return { preferred, fingerprint, problems }
+}
+
+/**
+ * 把 `deps({ capabilities })` 的原始值拆成「能力 → 首选」与「自定义能力定义」。
+ *
+ * 单一出处：`deps()` 用它做配置期校验，`depsPolicyFrom()` 用它构造策略 —— 两条路读同一份问题清单，
+ * 不会出现「预设说合法、引擎不认」。
+ */
+export function parseCapabilities(raw: unknown): {
+  capabilities: Record<string, string>
+  customCapabilities: WheelFingerprint[]
+  problems: string[]
+} {
+  const capabilities: Record<string, string> = {}
+  const customCapabilities: WheelFingerprint[] = []
+  const problems: string[] = []
+  if (!isPlainObject(raw)) return { capabilities, customCapabilities, problems }
+
+  for (const [name, value] of Object.entries(raw)) {
+    const parsed = parseCapability(name, value)
+    problems.push(...parsed.problems)
+    if (parsed.problems.length > 0 || parsed.preferred === undefined) continue
+    capabilities[name] = parsed.preferred
+    if (parsed.fingerprint) customCapabilities.push(parsed.fingerprint)
+  }
+  return { capabilities, customCapabilities, problems }
+}
+
+export function depsPolicyFrom(params: Record<string, unknown>): DepsPolicy {
+  const parsed = parseCapabilities(params.capabilities)
+  if (parsed.problems.length > 0) {
+    throw new Error(`依赖策略配置错误：\n  - ${parsed.problems.join('\n  - ')}`)
   }
   return {
     allow: asStringArray(params.allow),
     deny: asStringArray(params.deny),
-    capabilities,
+    capabilities: parsed.capabilities,
+    customCapabilities: parsed.customCapabilities,
     fingerprints: overridesFrom(params.fingerprints),
   }
 }
@@ -201,6 +380,11 @@ export function policyConflicts(
   platformCapabilities: Iterable<string> = [],
 ): string[] {
   const platform = new Set(platformCapabilities)
+  // 自定义能力也可以声明 `platform: true`（首选是平台内置 API）—— 它同样不是依赖，
+  // 不要求出现在 allow 里。只看内置表就会把这类能力误报成「首选不在白名单」。
+  for (const entry of policy.customCapabilities ?? []) {
+    if (entry.platform === true) platform.add(entry.capability)
+  }
   const conflicts: string[] = []
   for (const [capability, preferred] of Object.entries(policy.capabilities)) {
     if (platform.has(capability)) continue // 平台内置（structuredClone / Intl / URLSearchParams…）不是依赖

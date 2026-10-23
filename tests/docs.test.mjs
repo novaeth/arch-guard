@@ -161,6 +161,33 @@ test('渲染只改块内内容：块外的散文与别的块一字不动', async
 
 /* ---------------- CLI：--check-docs / --render-docs ---------------- */
 
+test('--render-docs：自定义能力也进能力表（与内置能力同一张表）', async () => {
+  const dir = makeProject('<!-- arch-guard:begin deps -->\n<!-- arch-guard:end deps -->\n')
+  try {
+    writeFileSync(
+      join(dir, 'arch.config.mjs'),
+      `import { canonical, deps } from '${INDEX_URL}'
+export default {
+  sourceForm: 'typescript',
+  presets: [
+    canonical(),
+    deps({
+      capabilities: {
+        'http-client': { preferred: 'axios', syntax: ['fetch'], hint: '用 axios 统一封装' },
+      },
+    }),
+  ],
+}
+`,
+    )
+    assert.equal((await runCli(['--render-docs'], dir)).code, 0)
+    const text = readFileSync(join(dir, 'NOTES.md'), 'utf8')
+    assert.match(text, /`http-client` \| `axios`/, '自定义能力必须出现在渲染出的能力表里')
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
+})
+
 test('--check-docs：块与 config 不一致即红，并指名文件与块', async () => {
   const dir = makeProject(
     '# 项目说明\n\n<!-- arch-guard:begin thresholds -->\n| 文件行数 | 999 |\n<!-- arch-guard:end thresholds -->\n',

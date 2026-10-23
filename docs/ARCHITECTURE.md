@@ -71,7 +71,7 @@ src/
     codes.ts          对外契约枚举：NOTICE_CODES / SKIP_CODES（数组 + 派生常量表 + 守卫）
     docs.ts           文档管理块渲染（--render-docs / --check-docs）
     explain.ts        --explain：角色 / 依赖 / 落点 / 适用规则
-    deps.ts           依赖事实与策略（allow / deny / capabilities）
+    deps.ts           依赖事实与策略（allow / deny / capabilities；capability 可为自定义能力对象）
     deps-audit.ts     --verify-deps：适配表 vs package.json + 适配表全表
     i18n.ts          文案资源索引        css.ts  postcss 解析（按扩展名选语法）+ 令牌 / 颜色求值
     coverage.ts      M 域产物解析        git.ts  scope 的 git 事实 + .gitignore 基础层
@@ -96,7 +96,7 @@ src/
                 solution-alternatives（同类方案）· framework-sources（源码形态扩展名）·
                 face-forms（方案面形态词汇）· css-value-families（CSS 数值三族）· css-syntaxes（样式扩展名 → 解析语法）· retired-names（退路标记）· plural-forms（词形）·
                 icon-packages · build-output-dirs（产物目录兜底跳过名单）
-__fixtures__/   98 个夹具项目：每条规则一对「违规必报 × 合规不报」，全部 exact
+__fixtures__/   99 个夹具项目：每条规则一对「违规必报 × 合规不报」，全部 exact
 examples/minimal/  干净的宿主示例（可搬运性验证）
 arch.config.mjs    门禁自己的配置（库范式 + 依赖选型 + 度量）
 ```

@@ -17,6 +17,31 @@
 
 ## [Unreleased]
 
+### Added（R-154：自定义 capability —— 宿主可以登记本体没有的能力）
+
+- `deps({ capabilities })` 的值除字符串（`{ datetime: 'dayjs' }`）外，新增**对象形态**：
+
+  ```js
+  deps({
+    capabilities: {
+      'http-client': {
+        preferred: 'axios',
+        syntax: ['\\bfetch\\s*\\('],
+        hint: '请求统一走 src/shared/api/client.ts 的 axios 封装',
+      },
+    },
+  })
+  ```
+
+  对象可以带 `syntax`（强指纹）或 `softSyntax` + `apiNames`（P07 的两类证据）、`platform`、`allowOwn`、`note`。
+  自定义能力与内置能力拼成**同一张生效表**：P06 / P07 / `policyConflicts` / `--render-docs` / `--verify-deps`
+  不区分来源；`fingerprints` 覆盖也可以指向自定义能力。
+
+- **配置阶段 fail-closed**：与内置能力重名（改内置证据请用 `fingerprints`）、pattern 编译不了、
+  没有证据、`apiNames` 与 `softSyntax` 不成对、缺 `hint` —— 都在 `deps()` 抛错，不留「看起来能配」的口子。
+- 新增夹具 `custom-capability`（自定义 `http-client`：裸 `fetch(` 违规必报 × import axios 的合规文件不报）
+  与解析 / P06 / P07 / 校验单测；`docs/USAGE.md`、`docs/DESIGN.md` §16.1、`PARADIGM.md` §12.2 同步。
+
 ## [0.11.0] - 2026-10-08
 
 > **契约与迁移（这一版必读 —— 退出码语义扩展 + 运行时依赖 2 → 8）**

@@ -604,7 +604,12 @@ deps({
 | **强指纹**            | 形态无歧义：`JSON.parse(JSON.stringify(x))`、`Math.random().toString(36)`、手搓 `process.argv.indexOf`、`toLocaleDateString` | 单证据即 **error**   |
 | **弱指纹 + 命名指纹** | 自研模块同时命中弱形态（`setTimeout` + `clearTimeout`）与 ≥2 个库 API 名（`debounce` / `throttle`）                          | **warn**             |
 | **允许自研的能力**    | `allowOwn: true`（例如 query string 小工具）                                                                                 | 只提示               |
+| **自定义能力**        | `deps({ capabilities: { 'http-client': { preferred, syntax… } } })` 登记内置表没有的能力（R-154）                            | 与内置同表           |
 | **项目覆盖**          | `deps({ fingerprints })` 对某个能力加 / 删指纹、改 API 名、放宽 `allowOwn`（企业规范收紧、自研库其实成熟）                   | 判定跟着**生效表**走 |
+
+自定义能力用**对象形态**写在 `capabilities` 里：`preferred`（首选方案）+ `syntax` 或
+`softSyntax` + `apiNames`（两档证据）+ `hint`。它与内置能力拼成同一张生效表，P06 / P07 不区分来源；
+与内置能力重名时配置阶段直接报错（改内置证据用 `fingerprints`）。
 
 指纹表（能力 / 首选方案 / 语法指纹 / API 名 / 推荐写法）在 `data/wheel-fingerprints.ts`，**纯数据，引擎零库名**。
 

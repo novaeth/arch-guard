@@ -1,6 +1,10 @@
 import { capabilityOf, wheelFingerprints } from '../data/wheel-fingerprints.js'
 import { AdapterError } from '../engine/adapters.js'
-import type { FingerprintOverride } from '../engine/deps.js'
+import {
+  parseCapabilities,
+  type CapabilityDeclaration,
+  type FingerprintOverride,
+} from '../engine/deps.js'
 import type { Preset } from '../engine/types.js'
 
 export interface ContrastPair {
@@ -169,8 +173,13 @@ export interface DepsOptions {
   allow?: string[]
   /** 明确禁用（P02）。**白名单已启用时它是多余的**，只在想给某几个库更明确的报错时用 */
   deny?: string[]
-  /** 能力 → 首选方案：{ 'cli-args': 'commander', datetime: 'dayjs' } */
-  capabilities?: Record<string, string>
+  /**
+   * 能力 → 首选方案：`{ 'cli-args': 'commander', datetime: 'dayjs' }`。
+   *
+   * 值也可以是**对象形态**（R-154）：`preferred` + `syntax` / `softSyntax` + `apiNames` + `hint`，
+   * 用来登记内置表没有的能力（企业请求层 / 事件总线 / 内部库）。对象与内置能力走同一张生效表。
+   */
+  capabilities?: Record<string, CapabilityDeclaration>
   /**
    * 开启「声明但未使用」（P08，warn）。**默认关**：只按 import 判会误伤
    * 自动 JSX 运行时（react）、副作用型依赖与只在构建配置里用的包。
@@ -178,20 +187,30 @@ export interface DepsOptions {
   unusedDeps?: boolean
   /**
    * 覆盖某个能力的**指纹证据**（R-73）：加 / 删 pattern、改 API 名清单、放宽 `allowOwn`。
-   * 首选方案不在这里 —— 那是 `capabilities` 的活（一个事实一个出处）。
+   * 首选方案不在这里 —— 那是 `capabilities` 的活（一个事实一个出处）。能力名可以是内置能力或自定义能力。
    */
   fingerprints?: FingerprintOverride[]
 }
 
 export function deps(options: DepsOptions = {}): Preset {
-  // 覆盖的校验放在这里（宿主写配置的地方）而不是规则里：
-  // 能力名拼错、pattern 写不成正则 —— 都是"配了但不生效"，必须当场报错
+  // 校验放在这里（宿主写配置的地方）而不是规则里：
+  // 能力名拼错、证据缺失、pattern 写不成正则 —— 都是"配了但不生效"，必须当场报错
+  const parsed = parseCapabilities(options.capabilities ?? {})
+  if (parsed.problems.length > 0) {
+    throw new AdapterError(
+      `deps() 的 capabilities 配置有误：\n  - ${parsed.problems.join('\n  - ')}`,
+    )
+  }
+  const customNames = new Set(parsed.customCapabilities.map((entry) => entry.capability))
   for (const override of options.fingerprints ?? []) {
     const entry = capabilityOf(override.capability)
-    if (!entry) {
+    if (!entry && !customNames.has(override.capability)) {
+      const known = [...wheelFingerprints.map((item) => item.capability), ...customNames].join(
+        ' / ',
+      )
       throw new AdapterError(
         `deps() 的指纹覆盖指向不存在的能力「${override.capability}」\n` +
-          `（内置能力：${wheelFingerprints.map((item) => item.capability).join(' / ')}）`,
+          `（内置能力与本次声明的自定义能力：${known}）`,
       )
     }
     for (const field of [

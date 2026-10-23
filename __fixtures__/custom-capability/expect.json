@@ -1,0 +1,4 @@
+{
+  "findings": [{ "rule": "P06", "file": "src/shared/lib/http.ts" }],
+  "exact": true
+}

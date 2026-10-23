@@ -161,13 +161,33 @@ export default {
 
 ### 2.2 域预设（域名 = 预设名）
 
-| 预设                | 域  | 关键参数（完整字段见 §2.4）                                                                                                                                                                                                                |
-| ------------------- | --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `designSystem({…})` | D   | `paletteFile` · `tokenDir` · `themeFile` · `styleDir` · `vendorDir` · `storageFile` · `staticPrefix` · `valueWhitelists` · `numberHomes`（D20：哪些名字的数字必须有家）· `contrastPairs` · `themes` · `htmlKeys`                           |
-| `copy({…})`         | C   | `messageApis` · `messageProps`（C01 的"组件库调用里的文案"那一半）—— **可以不写**：`uiKit(antdKit())` 自带 antd 那份；写了就以项目为准（`[]` = 关掉）                                                                                      |
-| `deps({…})`         | P   | `allow`（fail-closed 白名单 → P01）· `deny` · `capabilities`（能力→首选方案 → P06，如 `{ datetime: 'dayjs' }`：声明后手搓 `Intl.DateTimeFormat` / `toLocaleDateString` 就报；**不声明不判**）· `unusedDeps`（P08，默认关）· `fingerprints` |
-| `metrics({…})`      | M   | `coverage`（`report` / `perDirMin` / `zeroAllow` / `ratchet` / `baselineFile` / `mustCover` / `pathRewrite`）· `tests` · `depsBudget`                                                                                                      |
-| `hygiene()`         | H   | 无参数（H06 / H07 / H08 / H09 / H12 / H13，按能力协商）                                                                                                                                                                                    |
+| 预设                | 域  | 关键参数（完整字段见 §2.4）                                                                                                                                                                                      |
+| ------------------- | --- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `designSystem({…})` | D   | `paletteFile` · `tokenDir` · `themeFile` · `styleDir` · `vendorDir` · `storageFile` · `staticPrefix` · `valueWhitelists` · `numberHomes`（D20：哪些名字的数字必须有家）· `contrastPairs` · `themes` · `htmlKeys` |
+| `copy({…})`         | C   | `messageApis` · `messageProps`（C01 的"组件库调用里的文案"那一半）—— **可以不写**：`uiKit(antdKit())` 自带 antd 那份；写了就以项目为准（`[]` = 关掉）                                                            |
+| `deps({…})`         | P   | `allow`（fail-closed 白名单 → P01）· `deny` · `capabilities`（能力→首选方案 → P06，如 `{ datetime: 'dayjs' }`；值可以是**对象形态**登记自定义能力，见下）· `unusedDeps`（P08，默认关）· `fingerprints`           |
+| `metrics({…})`      | M   | `coverage`（`report` / `perDirMin` / `zeroAllow` / `ratchet` / `baselineFile` / `mustCover` / `pathRewrite`）· `tests` · `depsBudget`                                                                            |
+| `hygiene()`         | H   | 无参数（H06 / H07 / H08 / H09 / H12 / H13，按能力协商）                                                                                                                                                          |
+
+**自定义能力**（R-154）：`capabilities` 的值可以是对象 —— 首选方案 + 证据 + hint，用来登记本体没有的能力：
+
+```js
+deps({
+  capabilities: {
+    datetime: 'dayjs',
+    'http-client': {
+      preferred: 'axios',
+      syntax: ['\\bfetch\\s*\\('],
+      hint: '请求统一走 src/shared/api/client.ts 的 axios 封装',
+    },
+  },
+})
+```
+
+对象形态与内置能力拼成**同一张生效表**（P06 / P07 / `--render-docs` 都认，不另开消费路径）。
+至少要有一条证据：`syntax`，或 `softSyntax` + `apiNames`（P07 需要两类证据叠加）；
+`platform: true` 表示首选是平台内置 API（没有 import 可查 → 命中即报）。写错了（与内置能力重名 /
+正则编译不了 / 没有证据 / 缺 hint）在 `deps()` 阶段直接报错。`fingerprints` 覆盖也可以指向自定义能力。
 
 ### 2.3 方案面（可替换轴）
 
