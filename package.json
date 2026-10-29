@@ -1,6 +1,6 @@
 {
   "name": "@arch-guard/core",
-  "version": "0.11.1",
+  "version": "0.11.2",
   "description": "把架构写成可判定不变量的编码门禁：分层与边界、唯一出处、状态纪律、设计系统与魔法数字、文案、依赖、反退化",
   "type": "module",
   "license": "MIT",
