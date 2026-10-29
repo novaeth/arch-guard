@@ -11,3 +11,6 @@ export function poll(fn: () => void, wait: number): () => void {
     timer = setTimeout(fn, wait)
   }
 }
+
+/** H08 正例：真的内网地址照报。 */
+export const lanAddress = '10.12.0.5'

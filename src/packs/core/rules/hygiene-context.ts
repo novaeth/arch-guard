@@ -2,6 +2,7 @@ import { createRule } from '../../../engine/rule.js'
 import { packageNameOf } from '../../../engine/graph.js'
 import type { DetachedApi, Finding, Rule } from '../../../engine/types.js'
 import { finding } from './finding.js'
+import { isTestPath } from '../../../engine/test-paths.js'
 
 /**
  * 反退化域（H）续：上下文纪律、假异步、硬编码地址、假数据、手搓时间格式化。
@@ -63,7 +64,8 @@ export const noDetachedApis: Rule = createRule({
  * 测试文件里的 `http://localhost` 是正常用法（mock 服务）。
  */
 const LOCAL_HOST = /\b(?:https?:\/\/)?(?:localhost|127\.0\.0\.1|0\.0\.0\.0|\[::1\])(?::\d+)?/i
-const PRIVATE_IP = /\b(?:10|192\.168|172\.(?:1[6-9]|2\d|3[01]))\.\d{1,3}\.\d{1,3}\b/
+const PRIVATE_IP =
+  /\b(?:10\.\d{1,3}\.\d{1,3}|192\.168\.\d{1,3}|172\.(?:1[6-9]|2\d|3[01])\.\d{1,3})\.\d{1,3}\b/
 
 export const localHostLiterals: Rule = {
   id: 'H08',
@@ -75,7 +77,7 @@ export const localHostLiterals: Rule = {
   run: (ctx) => {
     const out: Finding[] = []
     for (const record of ctx.records) {
-      if (record.role === 'test' || /\.(test|spec)\./.test(record.rel)) continue
+      if (record.role === 'test' || isTestPath(record.rel)) continue
       const facts = ctx.facts.get(record.rel)
       if (!facts) continue
       for (const text of facts.strings) {
@@ -113,7 +115,7 @@ export const fakeAsync: Rule = {
   run: (ctx) => {
     const out: Finding[] = []
     for (const record of ctx.records) {
-      if (record.role === 'test' || /\.(test|spec)\./.test(record.rel)) continue
+      if (record.role === 'test' || isTestPath(record.rel)) continue
       const facts = ctx.facts.get(record.rel)
       if (!facts) continue
       const promise = facts.calls.find((call) => call.callee === 'Promise')
@@ -150,7 +152,7 @@ export const fakeData: Rule = {
   run: (ctx) => {
     const out: Finding[] = []
     for (const record of ctx.records) {
-      if (record.role === 'test' || /\.(test|spec)\./.test(record.rel)) continue
+      if (record.role === 'test' || isTestPath(record.rel)) continue
       const facts = ctx.facts.get(record.rel)
       if (!facts) continue
       const stem = (record.rel.split('/').pop() ?? '').replace(/\.(ts|tsx|mts|cts|js|mjs|cjs)$/, '')

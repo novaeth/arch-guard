@@ -13,6 +13,10 @@
       "file": "src/shared/config/env.ts"
     },
     {
+      "rule": "H08",
+      "file": "src/shared/lib/timers.ts"
+    },
+    {
       "rule": "H09",
       "file": "src/shared/lib/fixtures.ts"
     },
@@ -23,6 +27,10 @@
     {
       "rule": "S15",
       "file": "src/shared/config/env.ts"
+    },
+    {
+      "rule": "S15",
+      "file": "src/shared/lib/__tests__/fake-opencli.ts"
     },
     {
       "rule": "S15",
