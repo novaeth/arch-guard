@@ -83,6 +83,11 @@ export const MERGE_SPEC: Record<string, KeyMerge> = {
   },
   adviceAllow: { presets: 'n/a', project: 'concat', note: '只有项目能声明（预设给不了）' },
   aliases: { presets: 'n/a', project: 'special', note: '默认来自 tsconfig，项目层逐键覆盖' },
+  severity: {
+    presets: 'n/a',
+    project: 'fields',
+    note: '只有项目能声明：逐规则覆盖 error/warn（报告/退出码/JSON 同一处生效）',
+  },
   customRules: {
     presets: 'n/a',
     project: 'special',
@@ -144,6 +149,8 @@ export interface ResolvedProject {
   include: string[]
   disable: string[]
   enable?: string[] | 'all'
+  /** 逐规则严重度覆盖（只有项目层能写；值已由 `validateSeverity` 校验） */
+  severity?: Record<string, 'error' | 'warn'>
   exceptions: unknown[]
   adviceAllow: unknown[]
 }
@@ -180,6 +187,7 @@ export function resolveProject(
     include: list(merged.include) as string[],
     disable: list(merged.disable) as string[],
     enable: merged.enable as string[] | 'all' | undefined,
+    severity: merged.severity as ResolvedProject['severity'],
     exceptions: list(merged.exceptions),
     adviceAllow: list(merged.adviceAllow),
   }

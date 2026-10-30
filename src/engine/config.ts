@@ -25,6 +25,7 @@ import type {
   Thresholds,
 } from './types.js'
 import { exists, mergePresets } from './util.js'
+import { enableAllNotice, resolveEnable, validateSeverity } from './config-policy.js'
 
 export interface RawProjectConfig {
   /** 配置格式版本；与本工具不匹配时显式报错 */
@@ -164,6 +165,7 @@ const KNOWN_OVERRIDE_KEYS: Record<keyof ConfigOverrides, true> = {
   adviceAllow: true,
   aliases: true,
   customRules: true,
+  severity: true,
 }
 
 const KNOWN_STRUCTURE_KEYS: Record<keyof StructureSpec, true> = {
@@ -319,6 +321,7 @@ export async function loadConfig(options: {
    * 以前 `run.ts` 与 CLI 各推一遍（两处真相）；合并的冲突语义只有一份实现（`mergeRules`）。
    */
   const rules = mergeRules('overrides.customRules', baseRules ?? [], overrides.customRules ?? [])
+
   if (!baseRules && sourceForms.length === 0) {
     notices.push({
       code: 'source-form-missing',
@@ -348,6 +351,9 @@ export async function loadConfig(options: {
     preset as unknown as Record<string, unknown>,
     overrides as unknown as Record<string, unknown>,
   )
+
+  const expandedNotice = enableAllNotice(project, preset, rules, overrides)
+  if (expandedNotice) notices.push(expandedNotice)
 
   // 布局默认值属于预设（canonical），引擎不假设任何项目布局（见 §15.2 P3）
   const layout = project.layout
@@ -410,8 +416,9 @@ export async function loadConfig(options: {
     adapters,
     // `enable`：预设之间是并集（`all` 吸收，special），项目层是**整体替换**（表里写着）；
     // 谁都没写 = 'all'（"全部注册的规则"）
-    enable: (project.enable as string[] | 'all' | undefined) ?? 'all',
+    enable: resolveEnable(project.enable as string[] | 'all' | undefined, overrides),
     disable: project.disable,
+    severity: validateSeverity(project.severity, rules),
     // 结构声明同样是加法：预设与 overrides 合并后**统一校验**（维度/角色必须真实存在，见 resolveStructure）
     structure: resolveStructure({
       preset: preset.structure,

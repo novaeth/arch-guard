@@ -26,6 +26,21 @@ export interface ContrastPair {
 export interface DesignSystemOptions {
   /** 主题名集合（明暗两套时是 ['dark','light']） */
   themes?: string[]
+  /**
+   * **外部运行时提供的令牌命名空间**（D04 / D05）：宿主不拥有主题、令牌由运行时或另一个包注入时，
+   * 这些前缀的 `var()` 引用视为闭合，且不进死令牌账。
+   *
+   * 例：`[{ prefix: '--ext-', provider: '主题运行时' }]`。`prefix` 按**字符串前缀**匹配；
+   * `provider` 只进文档 / `--render-docs`（不参与判定，也无法校验版本 —— 那归宿主依赖管理）。
+   */
+  externalTokens?: ExternalTokenNamespace[]
+  /**
+   * **本包之外（或契约扫描域之外）会消费本包令牌的文件**（D05）：相对配置根的 glob 或绝对路径，
+   * 允许 `..`。D05 只读这些文件里的令牌名当"被引用"证据，不引入跨包图、不改扫描根。
+   *
+   * **0 命中 = 声明没生效**：此时 D05 与没声明时一致（该报的假死令牌照报），不会静默放过。
+   */
+  externalConsumers?: string[]
   /** 令牌目录（palette/foundation/scales/theme 都在这里） */
   tokenDir?: string
   /** 色板文件：颜色字面量的唯一出处 */
@@ -78,6 +93,84 @@ export interface NumberHome {
   in: string[]
 }
 
+/** 外部提供的令牌命名空间（D04 / D05）：命名空间是提供方能承诺的最小事实，不抄令牌名单 */
+export interface ExternalTokenNamespace {
+  /** 命名空间前缀（以 `--` 开头，如 `--ext-`）；按**字符串前缀**匹配 */
+  prefix: string
+  /** 提供方（只进文档 / `--render-docs`；不参与判定） */
+  provider?: string
+}
+
+/**
+ * 外部令牌声明**配置期 fail-closed**：形状不对直接抛，而不是"看起来配了、其实不生效"。
+ * 校验放在预设里（与 `deps()` 的 fail-closed 同口径），错误信息给出正确形态。
+ */
+function normalizeExternalTokens(
+  input: DesignSystemOptions['externalTokens'],
+): ExternalTokenNamespace[] {
+  if (input === undefined) return []
+  if (!Array.isArray(input)) {
+    throw new Error(
+      'designSystem({ externalTokens }) 必须是数组：' +
+        `[{ prefix: '--ext-', provider: '主题运行时' }]（当前 ${JSON.stringify(input)}）`,
+    )
+  }
+  const seen = new Set<string>()
+  return input.map((item) => {
+    if (item === null || typeof item !== 'object') {
+      throw new Error(
+        `designSystem({ externalTokens }) 的每一项必须是对象（当前 ${JSON.stringify(item)}）`,
+      )
+    }
+    const prefix = item.prefix
+    if (
+      typeof prefix !== 'string' ||
+      !prefix.startsWith('--') ||
+      prefix.length <= 2 ||
+      /\s/.test(prefix)
+    ) {
+      throw new Error(
+        `designSystem({ externalTokens }) 的 prefix 必须形如 '--ext-'（以 -- 开头、不含空白）：${JSON.stringify(prefix)}`,
+      )
+    }
+    if (seen.has(prefix)) {
+      throw new Error(
+        `designSystem({ externalTokens }) 的 prefix 重复：${prefix}（同一命名空间只声明一次）`,
+      )
+    }
+    seen.add(prefix)
+    if (
+      item.provider !== undefined &&
+      (typeof item.provider !== 'string' || item.provider.trim() === '')
+    ) {
+      throw new Error(
+        `designSystem({ externalTokens }) 的 provider 写了就必须是非空字符串：${JSON.stringify(item.provider)}`,
+      )
+    }
+    return { prefix, ...(item.provider === undefined ? {} : { provider: item.provider.trim() }) }
+  })
+}
+
+function normalizeExternalConsumers(input: DesignSystemOptions['externalConsumers']): string[] {
+  if (input === undefined) return []
+  if (!Array.isArray(input)) {
+    throw new Error(
+      'designSystem({ externalConsumers }) 必须是字符串数组（相对配置根的 glob 或绝对路径）：' +
+        `['../shared/src/**/*.css']（当前 ${JSON.stringify(input)}）`,
+    )
+  }
+  const out: string[] = []
+  for (const pattern of input) {
+    if (typeof pattern !== 'string' || pattern.trim() === '') {
+      throw new Error(
+        `designSystem({ externalConsumers }) 的每一项必须是非空字符串：${JSON.stringify(pattern)}`,
+      )
+    }
+    if (!out.includes(pattern.trim())) out.push(pattern.trim())
+  }
+  return out
+}
+
 /**
  * 设计系统预设：令牌分层、颜色唯一出处、明暗双份、对比度、魔法数字、样式落点。
  * 规则实现在 packs 里；本预设只贡献参数（换项目改这里，不改引擎）。
@@ -105,6 +198,8 @@ export function designSystem(options: DesignSystemOptions = {}): Preset {
     if (options.themeFile) paths.themeFile = options.themeFile
   }
   if (options.storageFile) paths.storageFile = options.storageFile
+  const externalTokens = normalizeExternalTokens(options.externalTokens)
+  const externalConsumers = normalizeExternalConsumers(options.externalConsumers)
   return {
     /**
      * 本预设贡献 **D 域全部规则**（多个预设之间是**并集**，见 `Preset.enable` 的说明）。
@@ -161,6 +256,9 @@ export function designSystem(options: DesignSystemOptions = {}): Preset {
       ...(options.staticPrefix ? { staticPrefix: options.staticPrefix } : {}),
       // 只在给了的时候落进 params：D20 的 `requires: ['designSystem.numberHomes']` 靠"有没有这个键"判声明
       ...(options.numberHomes ? { numberHomes: options.numberHomes } : {}),
+      // 外部令牌 / 外部消费者：缺省不落键（行为与旧版一致），声明了才进 `--render-docs`
+      ...(externalTokens.length > 0 ? { externalTokens } : {}),
+      ...(externalConsumers.length > 0 ? { externalConsumers } : {}),
       contrastPairs: options.contrastPairs ?? [],
       // 落点：用户显式给的（paths）放最后，压过任何默认推导
       ...paths,

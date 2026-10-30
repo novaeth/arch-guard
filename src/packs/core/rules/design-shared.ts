@@ -1,11 +1,13 @@
-import { readFileSync } from 'node:fs'
-import { join } from 'node:path'
+import { existsSync, readFileSync, statSync } from 'node:fs'
+import { dirname, isAbsolute, join, resolve } from 'node:path'
 
+import picomatch from 'picomatch'
 import valueParser from 'postcss-value-parser'
 
 import { parseCss } from '../../../engine/css.js'
+import { walk } from '../../../engine/util.js'
 import type { RuleContext } from '../../../engine/types.js'
-import type { ContrastPair } from '../../../presets/design-system.js'
+import type { ContrastPair, ExternalTokenNamespace } from '../../../presets/design-system.js'
 
 /**
  * 对比度组合的形状**只有一份**：公开配置那份（`presets/design-system.ts`）。
@@ -39,6 +41,10 @@ export interface DesignParams {
   storageFile: string
   htmlKeys: string[]
   contrastPairs: ContrastPair[]
+  /** 外部运行时提供的令牌命名空间（D04 视为闭合 / D05 不进退化账） */
+  externalTokens: ExternalTokenNamespace[]
+  /** 本包之外（或契约域之外）会消费本包令牌的文件 glob（D05 的"被引用"证据） */
+  externalConsumers: string[]
 }
 
 const DEFAULTS: Pick<DesignParams, 'themes' | 'htmlKeys'> = {
@@ -69,7 +75,85 @@ export function designParams(ctx: RuleContext): DesignParams {
     themes: p.themes ?? DEFAULTS.themes,
     htmlKeys: p.htmlKeys ?? DEFAULTS.htmlKeys,
     contrastPairs: p.contrastPairs ?? [],
+    // 外部令牌与外部消费者都是"声明才生效"的修饰项：缺省 = 没有（行为与旧版一致）
+    externalTokens: p.externalTokens ?? [],
+    externalConsumers: p.externalConsumers ?? [],
   }
+}
+
+/** 令牌名是否落在声明的外部命名空间里（前缀匹配 —— 提供方能承诺的最小事实，不抄名单） */
+export function isExternalToken(
+  name: string,
+  namespaces: readonly ExternalTokenNamespace[],
+): boolean {
+  return namespaces.some((namespace) => name.startsWith(namespace.prefix))
+}
+
+/** 外部消费者扫描的文件扩展名（只读文本；不解析、不进图） */
+const CONSUMER_EXTENSIONS = [
+  '.css',
+  '.scss',
+  '.less',
+  '.ts',
+  '.tsx',
+  '.js',
+  '.jsx',
+  '.mjs',
+  '.cjs',
+  '.mts',
+  '.cts',
+  '.html',
+]
+
+/** 外部消费者目录里天然不该进的子目录（与扫描根的默认口径一致） */
+const CONSUMER_SKIP = new Set(['node_modules', '.git', 'dist', 'coverage', '.arch-guard-cache'])
+
+const TOKEN_MENTION = /--[a-zA-Z0-9-]+(?![a-zA-Z0-9-])/g
+
+/**
+ * **本包之外（或契约域之外）的消费者文件里出现过的令牌名**（D05 用）。
+ *
+ * 只补"事实"：读声明的 glob 命中的文本文件、按令牌名出现算被引用；不解析、不进依赖图、
+ * 不改扫描根。支持相对配置根的路径（含 `..`）与绝对路径。
+ *
+ * **0 命中不静默**：返回空集 = 声明没生效，D05 与没声明时一致（该报的假死令牌照报）——
+ * 宁可吵，不可把"以为补了事实"变成假绿。
+ */
+export function externalConsumerTokens(ctx: RuleContext, patterns: readonly string[]): Set<string> {
+  const names = new Set<string>()
+  for (const pattern of patterns) {
+    const absolute = isAbsolute(pattern) ? pattern : resolve(ctx.config.root, pattern)
+    for (const file of filesForGlob(absolute)) {
+      let text: string
+      try {
+        text = readFileSync(file, 'utf8')
+      } catch {
+        continue
+      }
+      for (const match of text.matchAll(TOKEN_MENTION)) names.add(match[0])
+    }
+  }
+  return names
+}
+
+/** 把一个（绝对）glob 展开成文件列表：目录部分来自字面前缀，匹配交给 picomatch */
+function filesForGlob(absolutePattern: string): string[] {
+  const match = picomatch(absolutePattern)
+  const magic = absolutePattern.search(/[*?[{]/)
+  if (magic === -1) {
+    // 没有通配：可能是单个文件，也可能是整个目录
+    if (!existsSync(absolutePattern)) return []
+    const isDirectory = statSync(absolutePattern).isDirectory()
+    return isDirectory
+      ? walk(absolutePattern, { extensions: CONSUMER_EXTENSIONS, skip: CONSUMER_SKIP })
+      : [absolutePattern]
+  }
+  const literal = absolutePattern.slice(0, magic)
+  const base = literal.endsWith('/') ? literal.slice(0, -1) : dirname(literal)
+  if (!existsSync(base) || !statSync(base).isDirectory()) return []
+  return walk(base, { extensions: CONSUMER_EXTENSIONS, skip: CONSUMER_SKIP }).filter((file) =>
+    match(file),
+  )
 }
 
 export { finding, type FindingPosition } from './finding.js'

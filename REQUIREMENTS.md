@@ -482,7 +482,7 @@
 
 ## 七、后补的需求（按疼度排序）
 
-> **开着的：没有了**（`进行中` 0）—— 全部条目都已定：`已完成` 140 · `已委派` 4 · `不做` 7（R-04 / R-49 / R-50 / R-51 / R-52 / R-53 / R-109）。
+> **开着的：没有了**（`进行中` 0）—— 全部条目都已定：`已完成` 149 · `已委派` 4 · `不做` 7（R-04 / R-49 / R-50 / R-51 / R-52 / R-53 / R-109）。
 > **已撤**：R-30 复杂度 · R-70 抑制注释 · **R-94（analytics 面 kit 化）** —— 编号登记在第八节，不复用（见 N-06 / N-07 / N-13）。
 > 本节是**后补的一批**（含已完成与判不做的），按疼度排序；更早的按主题分散在一~六节。
 
@@ -1532,7 +1532,7 @@ messageProps: ['message', 'description', 'title'] })` —— 这两张表是 **a
   实际零覆盖，报告一个字都不提。与 R-74（规则在某个范式下**永远不命中**）同一家族，但更靠前一步：
   **规则压根没注册**。实测：`fsd()` 复用 `library()` 的启用清单，那份清单少了 9 条与范式无关的规则
 - **期望**：范式无关的规则在每个范式下都要**注册**（要项目声明的那些没声明就明列停用，不许消失）；
-  只有真正应用专属的（S03 · S04 · S05 · S06 · S09 · S14 · S15 · S18 · S19）允许缺席 ——
+  只有真正应用专属的（S03 · S04 · S05 · S06 · S09 · S14 · S18 · S19）允许缺席（S15 的孤儿判定与范式无关，2026-10-30 起 FSD 也启用） ——
   这份名单写成显式期望表，用两份真实示例（`canonical` / `fsd`）的注册差集判定，**多一条就红**
   （`tests/paradigm-coverage`）
 
@@ -1547,6 +1547,121 @@ messageProps: ['message', 'description', 'title'] })` —— 这两张表是 **a
 - **期望**：报告自述"有 N 条声明 0 命中"并点名（同一个 `declaration-no-match`）：落点类看文件 / glob 是否存在；
   清单类（`apis`）在**最宽松的匹配**（整名 / 前缀 / 后缀）下都没有任何调用命中才点名（宁少报不误伤）；
   环境读取的 `apis` 是成员访问链，拿 `reads` 判
+
+**R-162 门禁只有"全红 / 关掉"两档，且测试只认直接 import** · 已完成 · 本体（`overrides.severity` + M08 间接覆盖）
+
+- **长这样**：存量项目接 M08 → 一次几十条，宿主只能整条 `disable`（还债没有进度条）或整轮 `--report-only`
+  （把别的规则一起放过）；测试只 import 公开面 barrel（`shared/api/index.ts` 的 `export *`）时，
+  被再导出的实现明明有测试，M08 照报"没有测试" —— 宿主只能把 `requireTestsFor` 缩成"每个文件直连测试"
+- **会怎样**：渐进接入没有"先看见、暂不拦"的逐规则档位；间接覆盖不认公开面，等于逼宿主写更假的
+  `requireTestsFor`（或者永远红着）
+- **期望**：`overrides.severity: { M08: 'warn' }` 逐规则覆盖，报告 / 退出码 / JSON 同一处生效，
+  配置期 fail-closed；M08 穿"只有再导出的 barrel"一层算覆盖（只穿再导出文件，不穿任意 import 链）
+- **落地**：`src/engine/types.ts` / `src/engine/config.ts`（`severity` 合并 + 校验）·
+  `src/engine/run.ts`（覆盖后的规则集）· `src/packs/core/rules/metrics.ts`（M08 穿 barrel）；
+  单测 `tests/adoption.test.mjs`；`docs/USAGE.md` 配置字段 + `docs/DESIGN.md` §5.8 同步
+
+**R-163 项目层 enable 会静默放下自定义规则；`all` 的副作用不可见；"补几条"的写法没文档** · 已完成 · 本体（enable 语义收口）
+
+- **长这样**：`overrides.enable: ['S01', …]` + `customRules` → 自定义规则**一条都不跑**，报告也不提
+  （`skipped` 只有内置规则）；`enable: 'all'` 把预设没给的规则一起打开，报告不点名；文档只说"加进 enable"，
+  而项目层 `enable` 是整体替换 —— 照做就把预设清单全丢了，门禁突然全绿
+- **会怎样**：三种写法都能把"我以为在跑"变成"其实没跑"；`all` 打开了哪些规则、哪些在空转，只能靠人读配置
+- **期望**：自定义规则默认并入启用集（显式 `disable` 仍可关）；显式 `enable: 'all'` 而预设是清单时，
+  新增 `enable-all-expanded` notice 点名扩张；USAGE 写明"预设片段 `{ enable: [...] }`"的补规则写法
+- **落地**：`src/engine/config.ts`（customRules 并入 + enable-all 自述）· `src/engine/codes.ts`
+  （新 code，**REPORT_API_VERSION 2→3**）· `tests/report-contract.test.mjs`（冻结清单一并更新）·
+  `tests/adoption.test.mjs`；`docs/USAGE.md` / `docs/DESIGN.md` §6.9 版本史同步
+
+**R-161 FSD 的默认入口不在 app 段 → S15 把全树判成孤儿，且 0 命中无自述** · 已完成 · 本体（`fsd()` 入口 + 声明自述）
+
+- **长这样**：`fsd()` 复用 `library({ entry: [] })`，`entries` 是**显式空数组**（`??` 兜底不会触发）；
+  应用入口 `src/app/main.tsx` 不在根集 → S15 把全树报成"孤儿"（实测 500 条量级），宿主只能整条停用 S15。
+  同时 `entries` 一条都没匹配到文件这件事，报告一个字都不提（真因被 500 条误报埋掉）
+- **会怎样**：可达性（孤儿 / 死代码）在 FSD 下要么误报一片、要么被停用而静默失能；
+  `examples/full-fsd` 又把 S15 留在 `not-enabled` 里，**官方样板把问题盖住了**
+- **期望**：`fsd()` 默认入口 = `src/app/main.tsx`（可用 `fsd({ entry })` 覆盖），并把 S15 加进 FSD 启用清单
+  （FSD 没有"域入口"，②③自然空转，①孤儿判定与范式无关）；S15 在 `entries` 0 命中时**不判孤儿**；
+  `entries` 的 0 命中复用 `declaration-no-match` 自述点名（不新增 notice code，无契约变更）
+- **落地**：`src/presets/fsd.ts`（entries + enable S15）· `src/packs/core/rules/structure-graph.ts`（根集为空不判孤儿）·
+  `src/engine/notices.ts`（entries 0 命中自述）；`tests/fsd-entry.test.mjs`；`examples/full-fsd` 补两处真实欠账后
+  **92/107、0 finding**；`tests/paradigm-app-only.mjs` 从 9 条降为 8 条
+
+**R-160 声明过的 barrel（公开面 / 生成物）也被 S11 报** · 已完成 · 本体（S11 两类声明放行）
+
+- **长这样**：`library({ entry: ['index.ts'] })` 已把 `src/index.ts` 声明为包的公开面，内容就是
+  `export * from './engine/client.js'`；生成目录里的 `client.ts`（`structure.generated` 已声明、带
+  `@generated`）同样是 `export *` —— S11 对两类都报「禁 barrel」，宿主只能逐包/逐文件写例外
+- **会怎样**：S11 想防的是"随手造 barrel 造出依赖环"，而这两类 barrel 是**声明**出来的；例外按文件写，
+  每多一个包/生成器就多一条，且理由逐字重复；一旦某条例外写宽，真·随手 barrel 也一起被放过
+- **期望**：S11 放行"角色声明了 `entry: true`（或库范式 `slot: 'entry'`）"与"命中 `structure.generated`"的
+  文件，其余 `export *` 照报；**声明驱动、不按文件名猜**（`index.ts` 本身不是豁免理由）；
+  S08（依赖环）不受影响
+- **落地**：`FileRecord.entry`（角色表 → records，`src/engine/types.ts` + `src/engine/scan.ts`）；
+  `src/packs/core/rules/structure.ts` 的 S11；夹具 `__fixtures__/generated-marker`（生成物 + 公开面入口）、
+  单测 `tests/public-face-barrels.test.mjs`；`docs/DESIGN.md` S11 行同步
+
+**R-159 同一句"测试文件是脚手架"要在每条规则里各写一遍** · 已完成 · 本体（规则级 `appliesTo`）
+
+- **长这样**：`src/shared/lib/__tests__/big-helper.ts`（不是 `.test.`）超过体积阈值 → S16 按产品文件报；
+  测试夹具里 `process.argv[index]` 是**被测对象**，P06 按「手搓 argv 解析」报 —— 宿主只能为每个
+  `__tests__/**` 写例外，例外按目录写，目录里未来的真违规也一起免责
+- **会怎样**：0.11.2 刚把 H07/H08/H09 统一到 `isTestPath`（`__tests__/` 不算生产路径），S16/P06 没跟上；
+  同一句口径在引擎里留两套实现，第三次漂移只是时间问题
+- **期望**：规则契约 `appliesTo: 'product' | 'all'`（缺省 `all`，行为不变）；引擎对 `product` 规则统一按
+  `role === 'test'` / `isTestPath` / `layer >= TEST_LAYER_MIN` 跳过测试脚手架；S16 与 P06 标 `product`，
+  测试脚手架不再产生发现项，产品代码上的判定不变
+- **落地**：`src/engine/rule.ts` + `src/engine/run.ts` + `src/engine/rule-scope.ts`（引擎过滤）+ S16/P06 声明；夹具
+  `__fixtures__/rules`（60 行测试辅助 × 阈值 40）与 `__fixtures__/deps`（argv 测试夹具）；
+  单测 `tests/rule-applies-to.test.mjs`；`docs/DESIGN.md` §5.7/§5.1/§16.2 同步
+
+**R-158 令牌定义在本包、消费者在别的包 → D05 报假死令牌** · 已完成 · 本体（`designSystem.externalConsumers`）
+
+- **长这样**：`tokens/scale.css` 定义 `--app-len-13`，被 workspace 另一个包的组件样式引用；本包契约域是 `src/**`，
+  那些消费者不在 `records` 里 → D05 报「死令牌」，只能对 `scale.css` 整份写 `exceptions`（本包内真死的也一并放过）
+- **会怎样**：去重账（"定义的令牌都有人用"）一旦按目录整片豁免，就再也发现不了真死令牌；
+  而消费者跟着组件走（组件拆包 / 样式下沉）正是常态，这个缺口会越用越大
+- **期望**：`designSystem({ externalConsumers: [glob] })` 声明本包之外的消费者文件（相对配置根或绝对路径，
+  允许 `..`）；D05 **只读**这些文件里的令牌名当「被引用」证据，不引入跨包图、不改扫描根、不做 R-50 全量语义。
+  0 命中 = 声明没生效（D05 与没声明时一致，该报照报，不静默放过）
+- **落地（进行中）**：`.scratch/external-tokens/spec.md`；夹具 `__fixtures__/external-tokens`；
+  `docs/USAGE.md` §2.2/§2.5 同步；CHANGELOG `[Unreleased]`
+
+**R-157 令牌由运行时提供（宿主不拥有主题）→ D04 报悬空引用** · 已完成 · 本体（`designSystem.externalTokens`）
+
+- **长这样**：主题令牌由运行时注入，全局样式与组件样式写 `var(--ext-color-primary)`；本地 CSS 没有定义
+  → D04 报「未定义的令牌引用」，只能对整片样式目录写 `exceptions`（真正的悬空引用跟着静默）
+- **会怎样**：D04 的价值就是「改名/删令牌要一次改完消费方」；对"外部提供"的命名空间整片豁免后，
+  本地令牌的真悬空也一起免责 —— 这是把一条红线换成一条没人读的例外
+- **期望**：`designSystem({ externalTokens: [{ prefix: '--ext-', provider: '主题运行时' }] })`：
+  D04 对这些前缀的引用视为闭合；D05 不把外部前缀算进死令牌；配置期对"前缀不以 `--` 开头 / 重复前缀 /
+  空 provider"fail-closed。`provider` 只进文档与 `--render-docs`，不参与判定
+- **落地（进行中）**：`.scratch/external-tokens/spec.md`；单测覆盖前缀校验与 D04 边界；
+  `docs/USAGE.md` §2.2/§2.5 同步；CHANGELOG `[Unreleased]`
+
+**R-156 `--paths` 零匹配时首行仍打 ✔** · 已完成 · 本体（人读结论与退出码一致）
+
+- **长这样**：`arch-guard --paths src/typo/**` → 首行印 `✔ 架构守卫通过 · 规则 83/122 · 653 个文件`，
+  末尾才说「`--paths` 没有匹配到任何文件…别当成通过」，退出码 2。`docs/USAGE.md` §7 推荐的编辑器 hook
+  正是靠 `--paths "$FILE"` + 判退出码 2；JSON 侧 `ok=false` 早就修过（REPORT_API_VERSION v2），**人读侧没跟上**
+- **会怎样**：日志摘录 / 人眼只看到绿色结论就当成通过；「请求没被满足」与「判过且通过」在输出里长得一样
+- **期望**：零命中时**结论行**就是 ✖（`--paths 一个文件都没匹配到（本次 0 个文件被判定）`），
+  `paths-no-match` 自述紧跟结论之后（附录不重复）；退出码与 JSON 契约不变
+- **落地**：`src/engine/report.ts`（`renderHeader` / `renderSummary`）+ `tests/engine-report.test.mjs`；
+  CHANGELOG `[Unreleased]`
+
+**R-155 `export { default as X } from` 被 S45 误报** · 已完成 · 本体（S45 的 default 分支）
+
+- **长这样**：公开面 barrel 写 `export { default as Button } from './ui/Button'`，目标
+  `Button.tsx` 确有 `export default function Button`，却报「导入的 default 在 … 里没有导出：
+  路径解析得到，名字对不上」
+- **会怎样**：`export { default as X }` 是 barrel 的标准写法；error 级误报让合法写法被迫写例外，
+  或者让整条门禁显红 —— 而 S45 正是「假绿最容易发生、而此前没人管」的那条规则，误报会直接摧毁它的可信度
+- **期望**：`export { default as X } from '…'`（以及 `import { default as X }`）里被导入名 `default`
+  按**默认导出**判：目标有 default 就过，目标没有 default 时仍报「默认导入…没有 default 导出」；
+  夹具补「违规必报 × 合规不报」（`__fixtures__/missing-export` 同时含两种形态）
+- **落地**：`src/packs/core/rules/structure-imports.ts` + `tests/structure-imports.test.mjs` +
+  `__fixtures__/missing-export`；CHANGELOG `[Unreleased]`
 
 ## 八、不做（写在这里是为了不再重复讨论）
 

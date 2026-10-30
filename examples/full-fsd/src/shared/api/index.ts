@@ -1,4 +1,5 @@
 export { requestJson } from './client'
+export { generatedCrewSchema } from './generated/crews.gen'
 export { ENDPOINTS } from './endpoints'
 export { requestPolicy, RETRY_LIMIT } from './policy'
 export { queryClient } from './queryClient'

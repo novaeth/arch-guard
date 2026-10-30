@@ -147,6 +147,11 @@ export function pushDeclarationNotices(
   for (const glob of config.structure.generated ?? []) {
     if (!hasFile(glob)) empty.push(`generated 的 ${glob}`)
   }
+  // 入口（`config.entries`）是可达性规则的根：0 命中 = S15/S37 这类规则"没判定"，必须自述
+  const entries: string[] = Array.isArray(config.entries) ? config.entries : []
+  for (const entry of entries) {
+    if (!hasFile(entry)) empty.push(`entries 的 ${entry}`)
+  }
   for (const glob of config.structure.migrating ?? []) {
     if (!hasFile(glob)) empty.push(`migrating 的 ${glob}`)
   }

@@ -1,3 +1,4 @@
+import { globToRegExp } from '../../../engine/util.js'
 import type { Finding, Rule, RuleContext } from '../../../engine/types.js'
 
 import { presentFilesOf, routeEntriesOf, routeFilesOf } from './face-forms.js'
@@ -189,6 +190,15 @@ export const reachability: Rule = {
   run: (ctx) => {
     const { modulesRoot } = rootsOf(ctx)
     const out: Finding[] = []
+    /**
+     * 根集是不是空的：`config.entries` 一条都没匹配到文件 → `graph.orphaned` 会是**全树**。
+     * 那不是"全都是孤儿"，是"可达性没判定"（`entries` 0 命中由报告的自述点名）——
+     * 全报会把一个配置错误放大成几百条误报，反而把真问题埋掉。
+     */
+    const entryRootsMatched = ctx.config.entries.some((pattern) => {
+      const matcher = globToRegExp(pattern)
+      return ctx.files.some((rel) => matcher.test(rel))
+    })
     const isTest = (rel: string): boolean => /\.(test|spec)\./.test(rel)
 
     const byRel = new Map(ctx.records.map((record) => [record.rel, record]))
@@ -208,7 +218,7 @@ export const reachability: Rule = {
 
     // ① 孤儿文件：从 entries 出发不可达（测试、d.ts、以及**没有角色的非源码文件**不算：
     //    配置文件、index.html 天然不被 src 入口引用，把它们报成孤儿是纯噪音）
-    for (const orphan of ctx.graph.orphaned) {
+    for (const orphan of entryRootsMatched ? ctx.graph.orphaned : []) {
       const record = byRel.get(orphan)
       if (!record) continue
       // 域入口 / views 有各自更精确的判定（②③），这里不重复报「不可达」

@@ -1,7 +1,15 @@
 import { colorKey, findColorLiterals } from '../../../engine/css.js'
 import type { Finding, Rule } from '../../../engine/types.js'
 
-import { cssFiles, designParams, finding, isTokenFile, tryRead } from './design-shared.js'
+import {
+  cssFiles,
+  designParams,
+  externalConsumerTokens,
+  finding,
+  isExternalToken,
+  isTokenFile,
+  tryRead,
+} from './design-shared.js'
 
 /* ---------------- D03 色值唯一 ---------------- */
 
@@ -50,12 +58,15 @@ export const tokenRefsClosed: Rule = {
   title: '令牌引用闭合',
   hint: '悬空引用说明令牌被改名或删了；改名要一次改完消费方',
   run: (ctx) => {
+    const params = designParams(ctx)
     const files = cssFiles(ctx)
     const defined = new Set<string>()
     for (const file of files) for (const item of file.vars) defined.add(item.name)
     const out: Finding[] = []
     for (const file of files) {
       for (const ref of file.varRefs) {
+        // 外部运行时提供的命名空间：引用闭合由提供方保证，不归本仓的令牌表判
+        if (isExternalToken(ref.name, params.externalTokens)) continue
         if (defined.has(ref.name) || ref.hasFallback) continue
         out.push(finding('D04', file.rel, ref, `未定义的令牌引用：${ref.name}`))
       }
@@ -90,6 +101,8 @@ export const noDeadTokens: Rule = {
         const names = line.match(mention) ?? []
         const def = isDefFile ? line.match(defLine) : null
         if (def?.[1]) {
+          // 归外部命名空间的令牌不进本仓的退化账（本地定义可能只是兜底值，引用方在世界外）
+          if (isExternalToken(def[1], params.externalTokens)) continue
           const refs = edges.get(def[1]) ?? new Set<string>()
           for (const name of names) if (name !== def[1]) refs.add(name)
           edges.set(def[1], refs)
@@ -115,6 +128,10 @@ export const noDeadTokens: Rule = {
       roots.add(pair.bg)
       if (pair.parent) roots.add(pair.parent)
     }
+
+    // 外部消费者（本包外 / 契约域外的文件）：只把出现的令牌名当"被引用"，不做跨包图。
+    // 0 命中 = 声明没生效：与没声明时一致（该报的假死令牌照报），不静默放过。
+    for (const name of externalConsumerTokens(ctx, params.externalConsumers)) roots.add(name)
 
     const live = new Set<string>()
     const queue = [...roots]

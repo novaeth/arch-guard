@@ -36,6 +36,8 @@ import type { Config, Domain, Finding, Level, Rule, RuleContext, Severity } from
 import { applyReportFilters } from './filters.js'
 import { gitChangedFiles, gitHeadTimeMs, gitIgnoredPaths, stagedContentsOf } from './git.js'
 import { exists, globToRegExp } from './util.js'
+import { applySeverity } from './config-policy.js'
+import { shouldJudge } from './rule-scope.js'
 
 export type ScopeMode = 'full' | 'changed' | 'staged' | `since:${string}`
 
@@ -134,7 +136,7 @@ export async function runGuard(options: RunOptions): Promise<RunResult> {
    * 规则集：**配置解析期已算定**（内置集 + `overrides.customRules`），这里只处理"调用方整体替换"。
    * 见 ADR-0009 —— 以前 `run.ts` 与 CLI 各推一遍，现在读同一份 `config.rules`。
    */
-  const rules = config.rules
+  const rules = applySeverity(config.rules, config.severity ?? {})
   if (rules.length === 0) {
     throw new Error(
       '没有任何可跑的规则：调用方既没注入源码形态实现（sourceForms），也没给 ruleSet\n' +
@@ -272,6 +274,7 @@ export async function runGuard(options: RunOptions): Promise<RunResult> {
     sourceOf,
   }
 
+  const recordByRel = new Map(scan.records.map((record) => [record.rel, record]))
   const all: Finding[] = []
   const stats: RuleStat[] = []
   for (const rule of registry.enabled) {
@@ -279,6 +282,8 @@ export async function runGuard(options: RunOptions): Promise<RunResult> {
     try {
       let hits = 0
       for (const finding of rule.run(ctx)) {
+        // 规则照跑（别的文件还要判）；`appliesTo: 'product'` 只是让测试脚手架不产生发现项
+        if (!shouldJudge(rule, finding, recordByRel)) continue
         all.push(finding)
         hits += 1
       }

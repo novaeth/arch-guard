@@ -214,6 +214,8 @@ export const capabilityPreferred: Rule = {
   domain: 'deps',
   level: 'L2',
   severity: 'error',
+  // 能力纪律是**产品代码**的：测试夹具要真起子进程 / 真解析 argv 才能验行为本身
+  appliesTo: 'product',
   title: '能力必须用登记方案',
   hint: '用能力表里登记的首选方案，别手搓',
   run: (ctx) => {

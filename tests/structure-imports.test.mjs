@@ -90,6 +90,66 @@ test('S45：导入的名字不存在就报；default 只看 isDefault（带名�
   )
 })
 
+test('S45：`export { default as X } from` 的被导入名是 default —— 走默认导出判定，不报', () => {
+  // 公开面 barrel 的常见写法：`export { default as Header } from './ui/Header'`
+  // （目标确有 `export default function Header`）。
+  // facts 里这条"被导入名"记的是 `default`（propertyName ?? name），不是具名导出 ——
+  // 少了 default 分支就会把合法的公开面再导出报成"名字对不上"。
+  const compliant = rule('S45').run(
+    context({
+      records: ['src/shared/ui/index.ts', 'src/shared/ui/Header.tsx'],
+      facts: {
+        'src/shared/ui/index.ts': {
+          imports: [
+            { spec: './Header', line: 1, typeOnly: false, dynamic: false, names: ['default'] },
+          ],
+          exports: [
+            {
+              name: 'Header',
+              kind: 're-export',
+              isStar: false,
+              isDefault: false,
+              typeOnly: false,
+              line: 1,
+            },
+          ],
+        },
+        'src/shared/ui/Header.tsx': {
+          imports: [],
+          exports: [
+            {
+              name: 'Header',
+              kind: 'function',
+              isStar: false,
+              isDefault: true,
+              typeOnly: false,
+              line: 20,
+            },
+          ],
+        },
+      },
+    }),
+  )
+  assert.deepEqual(compliant, [], '目标有 default 导出时，default 再导出是合规的')
+
+  const missingDefault = rule('S45').run(
+    context({
+      records: ['src/shared/ui/index.ts', 'src/shared/ui/NoDefault.ts'],
+      facts: {
+        'src/shared/ui/index.ts': {
+          imports: [
+            { spec: './NoDefault', line: 1, typeOnly: false, dynamic: false, names: ['default'] },
+          ],
+          exports: [],
+        },
+        'src/shared/ui/NoDefault.ts': { imports: [], exports: [] },
+      },
+    }),
+  )
+  assert.equal(missingDefault.length, 1, '目标确实没有 default 时仍要报')
+  assert.match(missingDefault[0].text, /默认导入/)
+})
+
 test('S45：星号导出 / 星号导入 / 目标没有事实 / 解析不到 —— 一律不判（宁少报不误伤）', () => {
   const mk = (imported, targetExports) =>
     context({

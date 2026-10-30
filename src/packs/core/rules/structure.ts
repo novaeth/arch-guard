@@ -1,4 +1,5 @@
 import { resolveFramework } from '../../../data/framework-sources.js'
+import { globToRegExp } from '../../../engine/util.js'
 import type { Finding, Rule } from '../../../engine/types.js'
 
 import { placementHint } from './placement.js'
@@ -97,7 +98,16 @@ export const maxDepth: Rule = {
   },
 }
 
-/** S11 禁 barrel：`export *` 会把真实依赖藏起来，使依赖图不可判定 */
+/**
+ * S11 禁 barrel：`export *` 会把真实依赖藏起来，使依赖图不可判定。
+ *
+ * **边界（两类声明过的 barrel 放行）**：
+ * - **公开面入口**（角色 `entry: true` / 库范式 `slot: 'entry'`）：包 / 切片对外的唯一面就是它，
+ *   `export *` 是契约本身；S08 已经负责"barrel 造出依赖环"那一半；
+ * - **生成物**（`structure.generated` 命中）：机器生成的文件，形状由生成器负责，手改它才是错的。
+ *
+ * 两类都是**声明**（角色表 / structure.generated），不是按文件名猜 —— 没声明的 barrel 照报。
+ */
 export const noBarrel: Rule = {
   id: 'S11',
   domain: 'structure',
@@ -105,14 +115,18 @@ export const noBarrel: Rule = {
   severity: 'error',
   title: '禁 barrel 再导出',
   hint: '直接导出具体符号，别用 export * 聚合',
-  run: (ctx) =>
-    ctx.records.flatMap((record) => {
+  run: (ctx) => {
+    const generated = (ctx.config.structure.generated ?? []).map(globToRegExp)
+    return ctx.records.flatMap((record) => {
+      if (record.entry === true) return []
+      if (generated.some((matcher) => matcher.test(record.rel))) return []
       const facts = ctx.facts.get(record.rel)
       if (!facts) return []
       return facts.exports
         .filter((entry) => entry.isStar && !entry.typeOnly)
         .map((entry) => finding('S11', record.rel, entry, '禁 barrel：export * from ...'))
-    }),
+    })
+  },
 }
 
 /** S12 命名契约 */
@@ -255,6 +269,8 @@ export const sizeLimits: Rule = {
   domain: 'structure',
   level: 'L2',
   severity: 'error',
+  // 体积是**产品代码**的纪律：测试文件是脚手架（夹具、逐条断言），按产品阈值拆只会把测试摞进 src/
+  appliesTo: 'product',
   title: '体积阈值',
   hint: '超过上限就拆：页面拆组件，组件拆函数',
   run: (ctx) => {

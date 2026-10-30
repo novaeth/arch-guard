@@ -44,6 +44,11 @@ export interface FileRecord {
   kind: FileKind
   /** 页面级单元（来自角色的 `pageLike`）：S16 用 `viewLines` 判它 */
   pageLike?: boolean
+  /**
+   * **公开面入口**（角色声明了 `entry: true`，或库范式的 `slot: 'entry'`）：
+   * 它的 `export *` 是契约本身（包 / 切片对外的那一面），不是"随手造的转发层"——S11 不判。
+   */
+  entry?: boolean
 }
 
 export interface RoleDescriptor {
@@ -362,6 +367,8 @@ export interface ConfigOverrides {
   adapters?: Record<string, Adapter>
   enable?: string[] | 'all'
   disable?: string[]
+  /** 逐规则严重度覆盖（`{ M08: 'warn' }`）：先看见、暂不拦，不必整条关规则 */
+  severity?: Record<string, Severity>
   structure?: StructureSpec
   params?: Record<string, unknown>
   entries?: string[]
@@ -397,6 +404,11 @@ export interface Config {
   enable: string[] | 'all'
   /** 显式排除的规则：`enable` 求完之后再减掉 */
   disable: string[]
+  /**
+   * **逐规则严重度覆盖**（只项目层能写）：报告 / 退出码 / JSON 走同一处 `severityOf`。
+   * 用于渐进接入：先降成 warn 看见它，而不是把规则整条关掉（关掉连"有没有在判"都失去）。
+   */
+  severity: Record<string, Severity>
   /** 结构声明：层序 / 组隔离 / 公开面（S21–S23 的判据来源）。**已归一化**，三个字段都在 */
   structure: ResolvedStructure
   params: Record<string, unknown>
@@ -480,5 +492,7 @@ export interface Rule {
   /** 能力依赖：未声明的能力对应规则不注册（见 docs/DESIGN.md §7.4） */
   requires?: string[]
   hint?: string
+  /** 判谁：`'product'` = 测试脚手架不算产品代码纪律的对象（缺省 `'all'`，行为不变） */
+  appliesTo?: 'product' | 'all'
   run: (ctx: RuleContext) => Finding[]
 }

@@ -1,0 +1,7 @@
+{
+  "findings": [
+    { "rule": "D04", "file": "app/src/styles/global.css" },
+    { "rule": "D05", "file": "app/src/styles/tokens/palette.css" }
+  ],
+  "exact": true
+}

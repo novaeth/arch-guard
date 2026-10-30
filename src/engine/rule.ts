@@ -22,6 +22,15 @@ export interface RuleDefinition {
   title: string
   requires?: string[]
   hint?: string
+  /**
+   * 这条规则判的是**谁**：`'product'`（默认 `'all'`）表示"产品代码纪律" ——
+   * 测试脚手架（`role === 'test'` / `.test.` `.spec.` / `__tests__/` / `layer >= TEST_LAYER_MIN`）
+   * 不是它的对象，由引擎统一跳过，宿主不必为每个 `__tests__/helper.ts` 写例外。
+   *
+   * 为什么是规则级而不是逐条规则各写一遍：同一句口径（"测试文件是脚手架"）曾经在 S16 / P06
+   * 各漏一次，而 H07/H08/H09 已经用 `isTestPath` 修过一轮 —— 口径应该只有一处。
+   */
+  appliesTo?: 'product' | 'all'
   run: (ctx: RuleContext) => Finding[]
 }
 
@@ -57,6 +66,7 @@ export function createRule(definition: RuleDefinition): Rule {
     title: definition.title,
     ...(definition.requires ? { requires: definition.requires } : {}),
     ...(definition.hint ? { hint: definition.hint } : {}),
+    ...(definition.appliesTo ? { appliesTo: definition.appliesTo } : {}),
     run: definition.run,
   }
 }

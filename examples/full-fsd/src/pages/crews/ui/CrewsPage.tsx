@@ -6,6 +6,7 @@ import { ANALYTICS_EVENTS, useTrackView } from '@/shared/lib/analytics'
 import { messageOf } from '@/shared/lib/errorMessages'
 import { can, PERMISSIONS } from '@/shared/auth/permissions'
 import { CrewList } from '@/widgets/crew-list'
+import { formatCrewStamp } from '../lib/format'
 
 export function CrewsPage() {
   const { t } = useTranslation()
@@ -27,6 +28,7 @@ export function CrewsPage() {
         </p>
       ) : null}
       {can(PERMISSIONS.crewEdit) ? <p>{t('crews.editHint')}</p> : null}
+      <p>{formatCrewStamp()}</p>
       <CrewFilter value={keywords} onChange={setKeywords} />
       <CrewList crews={applyFilter(crews, keywords)} />
     </section>

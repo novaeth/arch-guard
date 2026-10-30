@@ -1,0 +1,4 @@
+/* 包外的消费者（契约扫描域之外）：D05 靠 externalConsumers 把这里出现的令牌算作"被引用" */
+.card {
+  gap: var(--app-only-outside);
+}

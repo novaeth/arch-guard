@@ -42,6 +42,94 @@
 - 新增夹具 `custom-capability`（自定义 `http-client`：裸 `fetch(` 违规必报 × import axios 的合规文件不报）
   与解析 / P06 / P07 / 校验单测；`docs/USAGE.md`、`docs/DESIGN.md` §16.1、`PARADIGM.md` §12.2 同步。
 
+### Added（R-157 / R-158：外部提供的令牌命名空间与外部消费者）
+
+- `designSystem({ externalTokens: [{ prefix, provider? }] })`：宿主**不拥有主题**、令牌由运行时注入时，
+  D04 把这些前缀的 `var()` 引用视为闭合，D05 不把它们算进死令牌账；`provider` 只进文档 / `--render-docs`。
+- `designSystem({ externalConsumers: [glob] })`：本包之外（或契约扫描域之外）会消费本包令牌的文件。
+  D05 **只读**这些文件里的令牌名当"被引用"证据 —— 不引入跨包图、不改扫描根
+  （R-50 的全量 workspace 语义仍然不做）。
+- 两者都是**加法**：不声明时行为与旧版完全一致（params 不落键）；配置期 fail-closed
+  （前缀不以 `--` 开头 / 重复前缀 / 空 provider / 空 glob 直接抛错，错误信息带正确形态）。
+- 夹具 `__fixtures__/external-tokens`（违规必报 × 合规不报）+ 单测 `tests/external-tokens.test.mjs`
+  （fail-closed 与"声明 ⇄ 不声明"对照）；`docs/USAGE.md` §2.2/§2.5、`docs/DESIGN.md` D04/D05 同步。
+- **边界**：`externalConsumers` 0 命中 = 声明未生效，D05 与没声明时一致（该报的假死令牌照报）—— 不静默放过。
+
+### Added（R-159：规则级 `appliesTo` —— 测试脚手架不是产品代码纪律的对象）
+
+- 规则契约新增 `appliesTo: 'product' | 'all'`（`createRule` 透传；**缺省 `'all'`，现有规则行为不变**）。
+  引擎对 `product` 规则统一跳过测试脚手架（`role === 'test'` / `isTestPath` / `layer >= TEST_LAYER_MIN`）——
+  "判谁"的口径只有引擎一处，规则不再各自写正则（H07/H08/H09 曾各自漏过一次 `__tests__/`）。
+- S16（体积阈值）与 P06（能力指纹）改为 `product`：`__tests__/` 下的测试辅助文件不再按产品阈值/产品纪律报，
+  产品代码上的判定不变。
+- 夹具：`__fixtures__/rules` 加 60 行测试辅助文件（阈值 40）、`__fixtures__/deps` 加读 `process.argv` 的
+  测试夹具；单测 `tests/rule-applies-to.test.mjs`。`docs/DESIGN.md` §5.7 / §5.1 / §16.2 同步。
+
+### Added（R-160：S11 放行声明过的 barrel —— 公开面入口 / 生成物）
+
+- records 带上 `entry`（角色 `entry: true` 或库范式 `slot: 'entry'`）；S11 对**公开面入口**与
+  **`structure.generated` 命中的生成物**里的 `export *` 不再报 —— 两类都是声明出来的契约形状，
+  不是"随手造的转发层"。**声明驱动、不按文件名猜**：没声明/没标 `index.ts` 照报，S08 的依赖环判定不变。
+- 夹具 `__fixtures__/generated-marker` 扩成两个合规形态（生成物 `export *` + 切片公开面入口 `export *`）；
+  单测 `tests/public-face-barrels.test.mjs` 覆盖"只认声明"的边界。`docs/DESIGN.md` S11 行同步。
+
+### Added（R-162：逐规则严重度覆盖 + M08 间接测试覆盖）
+
+- `overrides.severity: Record<规则 id, 'error' | 'warn'>`（**只项目层能写**）：渐进接入时"先看见、暂不拦"，
+  不必把规则整条关掉（关掉连"有没有在判"都失去）。报告 / 退出码 / JSON 都走同一处 `severityOf`；
+  配置期 fail-closed（值非法 / 拼错规则 id 直接报错）。
+- M08 增加**间接覆盖**：测试 import 的是"只有再导出的 barrel"时，被再导出的实现算"有测试"。
+  只穿再导出文件（不穿任意 import 链）—— 否则"测试 import 了入口"会变成"全树覆盖"。
+- 单测 `tests/adoption.test.mjs`；`docs/USAGE.md` 配置字段、`docs/DESIGN.md` §5.8 同步。
+
+### Changed（R-163：`enable` 语义收口 —— **破坏性：`apiVersion` 2 → 3**）
+
+> **破坏性**：新增 `notices[].code = 'enable-all-expanded'`，`REPORT_API_VERSION` 升到 **3**。
+> 迁移：消费方把 `apiVersion` 认到 3；遇到新 code 应"显示/忽略但不要当未知错误"。
+> 配置文件格式不变（新键都是可选加法），旧配置行为不变 —— **不需要改配置**。
+
+- **自定义规则默认在跑**：项目层 `enable` 是整体替换，以前 `customRules` 不在名单里就**一条都不跑**、报告也不提。
+  现在数组名单会自动并入 `customRules` 的 id（显式 `disable` 仍可关）。
+- **`enable: 'all'` 的副作用可见**：显式写 `all` 而预设给的是清单时，新增 notice `enable-all-expanded`
+  点名"额外打开了哪几条"（能力没配的规则会空转）。
+- **文档补上"补几条规则"的正确写法**：预设片段 `{ enable: ['S16'] }`（预设之间并集），别用项目层
+  `enable`（整体替换，会把预设清单全丢）。
+- 契约测试 `tests/report-contract.test.mjs`（apiVersion 3 + 冻结 code 清单）同批更新；
+  `docs/DESIGN.md` §6.9 版本史、`docs/USAGE.md` 配置字段与写法同步。
+
+### Fixed（R-161：`fsd()` 的默认入口不在 app 段，S15 把全树判成孤儿）
+
+> **误报 + 静默配置**；契约面（`apiVersion` / `NOTICE_CODES` / 退出码）不变 —— 复用 `declaration-no-match`。
+
+- `fsd()` 原样继承 `library({ entry: [] })` 的**显式空 `entries`**，于是可达性根集为空、S15 把全树报成孤儿，
+  而「`entries` 0 命中」没有任何自述。现在：默认入口 = `src/app/main.tsx`（`fsd({ entry })` 可覆盖），
+  S15 加进 FSD 启用清单（②③ 无域自然空转，①孤儿判定对 FSD 同样成立）。
+- S15 在 `entries` 一条都没匹配到时**不判孤儿**（"没判定" ≠ "全是孤儿"），改由 `declaration-no-match`
+  点名 `entries 的 <glob>`。
+- `examples/full-fsd` 打开 S15 后暴露并补齐两处真实可达性欠账（页面 `lib/` 未接、生成物未接公开面）：
+  **92/107、0 finding**；`tests/paradigm-app-only.mjs` 的缺席清单从 9 条降为 8 条（S15 不再缺席）。
+- 单测 `tests/fsd-entry.test.mjs`（默认入口 / 覆盖 / 0 命中不判 / 官方样板干净）。
+
+### Fixed（R-155：S45 把 `export { default as X } from` 误报成"名字对不上"）
+
+> **误报**，不改变判定口径：只有"少报误报"，没有"多报"。公开面 barrel 的常见写法踩到。
+
+- 事实模型把 `export { default as AppHeader } from './ui/AppHeader'` 的**被导入名**记为 `default`
+  （`propertyName ?? name`）；S45 只在具名导出集里找它，于是目标明明有 `export default function AppHeader`
+  仍报「导入的 default 在 … 没有导出」。现在 `default` 走**默认导出**那一半：目标有 default 就过，
+  目标确实没有 default 时仍报「默认导入…没有 default 导出」。
+- 夹具 `__fixtures__/missing-export` 增合规形态（`src/shared/ui/index.ts` 的 `default as util` 再导出），
+  单测补「有 default 不报 / 没 default 照报」两例。见 `REQUIREMENTS.md` R-155、`docs/DESIGN.md` S45 行。
+
+### Fixed（R-156：`--paths` 零匹配时首行仍打 ✔，与退出码 2 矛盾）
+
+> **人读输出**，契约面（退出码 / JSON `ok` / `notices[].code`）不变。
+
+- `--paths` 一个文件都没匹配上时，第一行以前仍是 `✔ 架构守卫通过`，末尾才说"别当成通过"，退出码却是 2
+  —— 日志摘录 / 编辑器 hook 只看到 ✔ 就会当成通过。现在结论行直接印
+  `✖ 架构守卫失败：--paths 一个文件都没匹配到（本次 0 个文件被判定）`，`paths-no-match` 自述紧跟结论之后
+  （附录不重复）。单测 `tests/engine-report.test.mjs` 覆盖首行与"不重复"两条。见 R-156、DESIGN §6.8(3)5。
+
 ## [0.11.0] - 2026-10-08
 
 > **契约与迁移（这一版必读 —— 退出码语义扩展 + 运行时依赖 2 → 8）**

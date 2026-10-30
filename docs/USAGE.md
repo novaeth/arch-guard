@@ -79,6 +79,7 @@ export default {
 | `exceptions`         | `{ rule, glob, reason, expires? }[]` | **规则级例外**（唯一的宽松通道；见 §5）                                                                                                                      |
 | `aliases`            | `Record<string, string>`             | 别名映射（默认从 `tsconfig.json` 的 `paths` 读）                                                                                                             |
 | `enable` · `disable` | `string[] \| 'all'`                  | 规则开关（`disable` 在 `enable` 求完之后再减）。**`disable` 是整条关掉** → 报告会自述停用了哪几条；只想对某类文件豁免，用 `exceptions`（要理由，可写到到期） |
+| `severity`           | `Record<string, 'error'\|'warn'>`    | **逐规则严重度覆盖**（只项目层能写）：先看见、暂不拦，不用整条关规则；报告 / 退出码 / JSON 同一处生效（见 §5.8）                                             |
 | `thresholds`         | 对象                                 | 行数 / 导出数 / 组件数阈值（S16 / S19）                                                                                                                      |
 | `naming`             | 对象                                 | `hookPrefix` / `viewSuffix`（S12 / S13 的词汇）                                                                                                              |
 | `structure`          | 对象                                 | 层序 / 组隔离 / 公开面声明（S21–S23、S32、S39–S43 的判据来源）                                                                                               |
@@ -103,7 +104,7 @@ export default {
 | ①   | 抄 [`examples/minimal`](../examples/minimal/) 的 **5 行**（范式 + 反退化 + 声明空 kit）                                                    | 71/107 规则在跑，绿  |
 | ②   | **看报告的停用清单**：它会说"因能力未声明而停用 N 条"，并**给出可以直接粘进配置的那一行**                                                  | 每补一行，覆盖多一层 |
 | ③   | 被某条规则拦到时，按 finding 的 `hint` 把调用收进声明的落点                                                                                | 纪律开始真的生效     |
-| ④   | 想要"配全长什么样"的终点形态，再看 [`examples/full`](../examples/full/)（canonical）或 [`examples/full-fsd`](../examples/full-fsd/)（FSD） | 102/107 与 91/107    |
+| ④   | 想要"配全长什么样"的终点形态，再看 [`examples/full`](../examples/full/)（canonical）或 [`examples/full-fsd`](../examples/full-fsd/)（FSD） | 102/107 与 92/107    |
 
 **四笔"没跑"的账要分清**（R-142 起报告**分开说**，`skipped[].code` 一一对应）：
 
@@ -131,6 +132,16 @@ export default {
 未启用 54 条规则（不在配置的 `enable` 名单里）：C01 / C02 / … / S44
     · 不配 = 不跑，不是通过：要跑就把它们加进 `arch.config.mjs` 的 `enable`，或换一个范式预设
 ```
+
+**`enable` 的三种写法**（补规则别把预设丢光）：
+
+- **要补几条 → 用预设片段**：`presets: [library(), { enable: ['S16'] }]`（预设之间是**并集**）；
+  或在预设对象上展开 `{ ...library(), enable: [...library().enable, 'S16'] }`。
+- **项目层 `enable` 是整体替换**：`overrides: { enable: ['S16'] }` 会**只跑 S16**，预设其余几十条一起丢 ——
+  要用它收窄门禁，前提是你想清楚"只留这几条"。
+- **`enable: 'all'` 有副作用**：它把预设没给的规则也打开（能力没配的规则只能空转）。显式写 `all` 时报告新增
+  `enable-all-expanded` 自述，点名"额外打开了哪几条"（消费方记得把 `apiVersion` 认到 3）。
+  `customRules` 不受名单影响、**默认参与**（显式 `disable` 仍可关）。
 
 配错了也有话说 —— 「声明 0 命中」的自述会附上**正确形态参考**：
 
@@ -161,13 +172,13 @@ export default {
 
 ### 2.2 域预设（域名 = 预设名）
 
-| 预设                | 域  | 关键参数（完整字段见 §2.4）                                                                                                                                                                                      |
-| ------------------- | --- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `designSystem({…})` | D   | `paletteFile` · `tokenDir` · `themeFile` · `styleDir` · `vendorDir` · `storageFile` · `staticPrefix` · `valueWhitelists` · `numberHomes`（D20：哪些名字的数字必须有家）· `contrastPairs` · `themes` · `htmlKeys` |
-| `copy({…})`         | C   | `messageApis` · `messageProps`（C01 的"组件库调用里的文案"那一半）—— **可以不写**：`uiKit(antdKit())` 自带 antd 那份；写了就以项目为准（`[]` = 关掉）                                                            |
-| `deps({…})`         | P   | `allow`（fail-closed 白名单 → P01）· `deny` · `capabilities`（能力→首选方案 → P06，如 `{ datetime: 'dayjs' }`；值可以是**对象形态**登记自定义能力，见下）· `unusedDeps`（P08，默认关）· `fingerprints`           |
-| `metrics({…})`      | M   | `coverage`（`report` / `perDirMin` / `zeroAllow` / `ratchet` / `baselineFile` / `mustCover` / `pathRewrite`）· `tests` · `depsBudget`                                                                            |
-| `hygiene()`         | H   | 无参数（H06 / H07 / H08 / H09 / H12 / H13，按能力协商）                                                                                                                                                          |
+| 预设                | 域  | 关键参数（完整字段见 §2.4）                                                                                                                                                                                                                                                                                              |
+| ------------------- | --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `designSystem({…})` | D   | `paletteFile` · `tokenDir` · `themeFile` · `styleDir` · `vendorDir` · `storageFile` · `staticPrefix` · `valueWhitelists` · `numberHomes`（D20：哪些名字的数字必须有家）· `contrastPairs` · `themes` · `htmlKeys` · `externalTokens`（运行时提供的令牌命名空间 → D04/D05）· `externalConsumers`（本包外消费者文件 → D05） |
+| `copy({…})`         | C   | `messageApis` · `messageProps`（C01 的"组件库调用里的文案"那一半）—— **可以不写**：`uiKit(antdKit())` 自带 antd 那份；写了就以项目为准（`[]` = 关掉）                                                                                                                                                                    |
+| `deps({…})`         | P   | `allow`（fail-closed 白名单 → P01）· `deny` · `capabilities`（能力→首选方案 → P06，如 `{ datetime: 'dayjs' }`；值可以是**对象形态**登记自定义能力，见下）· `unusedDeps`（P08，默认关）· `fingerprints`                                                                                                                   |
+| `metrics({…})`      | M   | `coverage`（`report` / `perDirMin` / `zeroAllow` / `ratchet` / `baselineFile` / `mustCover` / `pathRewrite`）· `tests` · `depsBudget`                                                                                                                                                                                    |
+| `hygiene()`         | H   | 无参数（H06 / H07 / H08 / H09 / H12 / H13，按能力协商）                                                                                                                                                                                                                                                                  |
 
 **自定义能力**（R-154）：`capabilities` 的值可以是对象 —— 首选方案 + 证据 + hint，用来登记本体没有的能力：
 
@@ -276,6 +287,8 @@ presets: [
 | ------------------------------------------ | ------------------------------------------------------- |
 | `designSystem.paletteFile`                 | D01 · D02 · D03 · D21                                   |
 | `designSystem.tokenDir`                    | D01 · D21                                               |
+| `designSystem.externalTokens`              | D04 · D05（外部运行时提供的令牌命名空间）               |
+| `designSystem.externalConsumers`           | D05（本包外 / 契约域外的消费者文件）                    |
 | `designSystem.staticPrefix`                | D02 · D18                                               |
 | `designSystem.themeFile`                   | D06 · D07                                               |
 | `designSystem.styleDir`                    | D12 · D13 · D14 · D15 · D16                             |
@@ -707,7 +720,7 @@ arch-guard --check-docs     # 只校验：不一致即红
 | 任务                             | 怎么做                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
 | -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | **新项目从零接入**               | ① 选范式（`canonical` / `library` / `fsd`）② 加域预设（`designSystem` / `copy` / `deps` / `metrics` / `hygiene`）③ 加方案面（`uiKit` / `i18n` …）④ 补 `params` 落点 ⑤ 进 CI ⑥ `--render-docs` 同步文档                                                                                                                                                                                                                                                                                                                                     |
-| **想看「配全」长什么样**         | 两份对称的活样板：[`examples/full/`](../examples/full/)（`canonical()` 三根拓扑，**102/107 在跑**）与 [`examples/full-fsd/`](../examples/full-fsd/)（`fsd()` 六层切片，**91/107**）。两者都是 0 finding；差的那几条：M02–M06 覆盖率五条要一份比 HEAD 新的产物（入库的必然过期，本仓自己也不声明 `coverage`），FSD 另有 S13 / S37 明列停用 + 9 条应用专属规则不适用。最短可用看 [`examples/minimal/`](../examples/minimal/)（71/107）                                                                                                       |
+| **想看「配全」长什么样**         | 两份对称的活样板：[`examples/full/`](../examples/full/)（`canonical()` 三根拓扑，**102/107 在跑**）与 [`examples/full-fsd/`](../examples/full-fsd/)（`fsd()` 六层切片，**92/107**）。两者都是 0 finding；差的那几条：M02–M06 覆盖率五条要一份比 HEAD 新的产物（入库的必然过期，本仓自己也不声明 `coverage`），FSD 另有 S13 / S37 明列停用 + 8 条应用专属规则不适用。最短可用看 [`examples/minimal/`](../examples/minimal/)（71/107）                                                                                                       |
 | **已有项目接入（存量很多违规）** | 没有基线可刷：先用 `include` 把契约域**收窄到已经守得住的部分**，再逐块放开；`--explain` 先问清落点；确实不适用的写 `exceptions`（带理由）                                                                                                                                                                                                                                                                                                                                                                                                 |
 | **换组件库 / 不用组件库**        | 改 `uiKit(antdKit() → 你的 kit → noneKit())` 一行；适配器约 30 行（`packages` / `vendorSelectors` / `detachedApis` / `examples`）。**换完旧库残留一条不剩**是可判定验收条件                                                                                                                                                                                                                                                                                                                                                                |
 | **换 i18n / 不用 i18n**          | `i18n(i18nextKit({…}) → 你的 kit → noneI18nKit())`；不用 i18n 时 C 域整体不注册                                                                                                                                                                                                                                                                                                                                                                                                                                                            |

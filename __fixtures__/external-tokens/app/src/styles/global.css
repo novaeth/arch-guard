@@ -1,0 +1,10 @@
+/* 合规：外部运行时提供的命名空间 → D04 不判；本地定义的令牌 → 闭合 */
+.card {
+  color: var(--ext-color-primary);
+  padding: var(--app-len-1);
+}
+
+/* 违规：既不在本地定义，也不在声明的外部命名空间里 → D04 必报 */
+.dangling {
+  color: var(--dangling-color);
+}

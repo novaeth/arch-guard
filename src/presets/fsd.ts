@@ -3,6 +3,8 @@ import type { Preset, RoleDescriptor } from '../engine/types.js'
 import { library } from './library.js'
 
 export interface FsdOptions {
+  /** 应用入口（相对 `src`，默认 `app/main.tsx`）—— 可达性分析的根；必须真的存在 */
+  entry?: string[]
   /** 源码根，默认 `src` */
   src?: string
   /** 有切片的层：层名 → 层号（越小越底层）。默认 FSD 的 pages/widgets/features/entities */
@@ -250,6 +252,7 @@ export function fsdRoleTable(options: FsdOptions = {}): RoleDescriptor[] {
  */
 export function fsd(options: FsdOptions = {}): Preset {
   const src = options.src ?? 'src'
+  const base = library({ src, entry: [] })
   const lists = segmentLists(options)
   // 层号只解析一次：角色表与结构声明必须看到同一份
   const slicedLayers = options.slicedLayers ?? { pages: 5, widgets: 4, features: 3, entities: 2 }
@@ -263,10 +266,16 @@ export function fsd(options: FsdOptions = {}): Preset {
   // 同样进重名词汇表；规则里再按"真实存在"过滤一次。
   const sharedSegmentRoles = lists.sharedSegments.map((segment) => `fsd:shared:${segment}`)
   return {
-    ...library({ src, entry: [] }),
+    ...base,
     // 覆盖 library 的范式标识：FSD 也是一个范式，不能和库范式混用
     paradigm: 'fsd',
     roles: fsdRoleTable(options),
+    /**
+     * **FSD 的入口默认在 app 段**（`src/app/main.tsx`）。`library()` 的 `layout.app = src` 会让默认
+     * 入口落成 `src/main.tsx`（FSD 里不存在），根集为空 → 可达性规则（S15）把全树判成孤儿。
+     * 项目入口不叫 `main.tsx` 时用 `fsd({ entry: ['app/bootstrap.tsx'] })` 覆盖。
+     */
+    entries: (options.entry ?? ['app/main.tsx']).map((file) => `${src}/${file}`),
     // FSD 的契约落点都在官方段名之下（app 的 `styles` / shared 的 `config` `i18n`），
     // 于是 `[fsd(), designSystem()]` 开箱即符合 FSD 目录，不用手写一堆路径
     params: {
@@ -294,6 +303,10 @@ export function fsd(options: FsdOptions = {}): Preset {
     //   nameCollisions   → S29 切片名 / 组路径段撞上 shared 的片段名
     //   repetitiveNaming → S30 同一层每个组名都带同一个词
     //   pluralConsistency→ S31 `entities` 层单复数混用
+    enable: [
+      ...((base.enable as string[] | 'all') === 'all' ? [] : (base.enable as string[])),
+      'S15',
+    ],
     structure: {
       order: true,
       isolate: ['slice'],

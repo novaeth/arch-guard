@@ -118,7 +118,7 @@ test('范式覆盖：每个范式的账目都必须闭合，且 fsd 未启用的
   assert.deepEqual(
     fsdExample.missing,
     [],
-    'fsd：账目必须闭合 —— 那 9 条不再"静默消失"，而是明列 `not-enabled`',
+    'fsd：账目必须闭合 —— 那 8 条不再"静默消失"，而是明列 `not-enabled`',
   )
   assert.deepEqual(
     fsdExample.notEnabled,

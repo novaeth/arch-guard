@@ -44,10 +44,10 @@ function makeProject() {
     join(dir, 'arch.config.mjs'),
     `import { canonical } from '${INDEX_URL}'\nexport default { presets: [canonical()] }\n`,
   )
-  writeFileSync(
-    join(dir, 'src/shared/lib/bad.ts'),
-    'export function bad(): void {\n  console.log("残留")\n}\n',
-  )
+  // 违规要**与入口无关**：S11（非公开面 barrel）不依赖可达性根集，
+  // 否则 `entries` 0 命中时"根集为空不判孤儿"会让这个夹具静默变绿。
+  writeFileSync(join(dir, 'src/shared/lib/bad.ts'), "export * from './inner'\n")
+  writeFileSync(join(dir, 'src/shared/lib/inner.ts'), 'export const inner = 1\n')
   return dir
 }
 

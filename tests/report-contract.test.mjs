@@ -102,8 +102,8 @@ test('契约版本带着走，且消费方能拒绝不认识的版本', async ()
     assert.equal(json.apiVersion, REPORT_API_VERSION)
     assert.equal(
       json.apiVersion,
-      2,
-      'v2 = `ok` 语义收窄（破坏性变更，动它必须同时改这里 + §6.9 + CHANGELOG）',
+      3,
+      'v3 = 新增 `enable-all-expanded` notice code（破坏性变更，动它必须同时改这里 + §6.9 + CHANGELOG）',
     )
     assert.equal(typeof json.apiVersion, 'number')
   } finally {
@@ -122,6 +122,7 @@ test('冻结：notices 的稳定 code 清单（文案不是契约，code 才是�
     'coverage-updated',
     'declaration-no-match',
     'deps-allow-not-enabled',
+    'enable-all-expanded',
     'facts-cache',
     'facts-cache-reset',
     'facts-cache-unavailable',

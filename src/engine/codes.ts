@@ -79,6 +79,8 @@ export const NOTICE_CODES = [
   'legacy-baseline',
   /** C01 的「文案位名单」取自哪里（项目声明 / 组件库适配器默认 / 无）—— 换库时那一半会静默关掉 */
   'copy-list-source',
+  /** 项目层 `enable: 'all'` 把预设没给的规则也打开了：副作用点名（能力没配的规则会空转） */
+  'enable-all-expanded',
 ] as const
 
 export type NoticeCode = (typeof NOTICE_CODES)[number]

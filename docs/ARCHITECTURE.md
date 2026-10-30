@@ -96,7 +96,7 @@ src/
                 solution-alternatives（同类方案）· framework-sources（源码形态扩展名）·
                 face-forms（方案面形态词汇）· css-value-families（CSS 数值三族）· css-syntaxes（样式扩展名 → 解析语法）· retired-names（退路标记）· plural-forms（词形）·
                 icon-packages · build-output-dirs（产物目录兜底跳过名单）
-__fixtures__/   99 个夹具项目：每条规则一对「违规必报 × 合规不报」，全部 exact
+__fixtures__/   100 个夹具项目：每条规则一对「违规必报 × 合规不报」，全部 exact
 examples/minimal/  干净的宿主示例（可搬运性验证）
 arch.config.mjs    门禁自己的配置（库范式 + 依赖选型 + 度量）
 ```

@@ -173,6 +173,9 @@ export function recordOf(
     groupName: groupName && matched.captured[groupName] ? groupName : null,
     kind: matched.kind,
     ...(matched.descriptor.pageLike === true ? { pageLike: true } : {}),
+    ...(matched.descriptor.entry === true || matched.descriptor.slot === 'entry'
+      ? { entry: true }
+      : {}),
   }
 }
 

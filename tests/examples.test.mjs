@@ -543,7 +543,7 @@ test('变异：示例被改坏时必须抓到（这就是"规则还有效"的回
 /**
  * **FSD 版样板（R-87 的现场）**：`fsd()` 复用 `library()` 的启用清单，那份清单曾经少了 9 条
  * 与范式无关的规则 —— 它们在 FSD 下**既不跑、也不在停用清单里**。
- * 现在注册集与 canonical 只差"应用专属"那 9 条（见 tests/paradigm-coverage）。
+ * 现在注册集与 canonical 只差"应用专属"那 8 条（见 tests/paradigm-coverage）。
  */
 test('示例基线（FSD）：除明列停用外全在跑、0 finding、没有"声明 0 命中"自述', async () => {
   const result = await run(FSD_EXAMPLE)

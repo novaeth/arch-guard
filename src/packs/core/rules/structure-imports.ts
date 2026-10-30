@@ -46,6 +46,11 @@ export const resolvableImports: Rule = {
          * `export default function App()` 在事实里是 `{ name: 'App', isDefault: true }` ——
          * 它**只有**默认导出，没有具名导出 `App`。所以两个集合要分开算：
          * 具名可导入集排除"带名字的 default"，默认导出看 `isDefault`（或 `name === 'default'`）。
+         *
+         * `export { default as X } from './x'`（以及 `import { default as X } from './x'`）在事实里
+         * 被导入名是 **`default`**（`facts.ts` 取的是 `propertyName ?? name`），走的是默认导出那一半，
+         * 不是具名导出集 —— 少了这个分支就会把"默认导出再导出"误报成"名字对不上"
+         * （`export { default as X } from './x'` 是公开面 barrel 的标准写法）。
          */
         const named = new Set(
           targetFacts.exports
@@ -56,15 +61,24 @@ export const resolvableImports: Rule = {
           (item) => item.isDefault || item.name === 'default',
         )
         for (const name of imported.names ?? []) {
-          if (named.has(name)) continue
+          const ok = name === 'default' ? hasDefault : named.has(name)
+          if (ok) continue
           out.push(
-            finding(
-              'S45',
-              record.rel,
-              imported,
-              `导入的 ${name} 在 ${target} 里没有导出：路径解析得到，名字对不上`,
-              `改成 ${target} 真正导出的名字，或把它加进那个文件的导出`,
-            ),
+            name === 'default'
+              ? finding(
+                  'S45',
+                  record.rel,
+                  imported,
+                  `默认导入在 ${target} 里没有 default 导出`,
+                  `改成具名导入（或给 ${target} 加 default 导出）`,
+                )
+              : finding(
+                  'S45',
+                  record.rel,
+                  imported,
+                  `导入的 ${name} 在 ${target} 里没有导出：路径解析得到，名字对不上`,
+                  `改成 ${target} 真正导出的名字，或把它加进那个文件的导出`,
+                ),
           )
         }
         if (imported.hasDefault && !hasDefault) {

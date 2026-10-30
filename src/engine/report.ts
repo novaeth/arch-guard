@@ -76,6 +76,16 @@ export function summarize(
 }
 
 /**
+ * **`--paths` 一个文件都没匹配上 = 请求无法满足，不是"通过"**。
+ *
+ * 退出码已经是 2（`run.ts`），但人读输出的第一行以前仍是绿色的「✔ 架构守卫通过」——
+ * 编辑器 hook / CI 日志摘录只看到那一行就会当成通过（真实用户实测踩过）。
+ * 所以结论行要与退出码一致，并把 `paths-no-match` 自述**前置**到结论后面，而不是埋在附录末尾。
+ */
+const nothingJudged = (input: ReportInput): boolean =>
+  input.paths !== null && input.paths.matched === 0
+
+/**
  * **结论前置**（UX）：人读输出时第一眼该看到"过没过"，而不是先翻十行元信息。
  * 元信息（范围 / 自述 / 例外）全部归到末尾的附录（`renderSummary`），退出码语义不变。
  */
@@ -88,6 +98,13 @@ export function renderHeader(input: ReportInput): void {
   ]
     .filter(Boolean)
     .join(' · ')
+  if (nothingJudged(input)) {
+    // `--paths` 零命中：没有违规可报，但"没判定"必须一眼可见（✖ 与退出码 2 同义）
+    out(color.red(`✖ 架构守卫失败：--paths 一个文件都没匹配到（本次 0 个文件被判定） · ${meta}`))
+    const notice = input.notices.find((entry) => entry.code === 'paths-no-match')
+    if (notice) out(color.red(`  ${notice.text}`))
+    return
+  }
   if (errors > 0) {
     out(color.red(`✖ 架构守卫失败：${errors} 个 error、${warnings} 个 warn · ${meta}`))
   } else {
@@ -227,7 +244,11 @@ export function renderSummary(input: ReportInput): void {
   if (input.unknownEnabled.length > 0) {
     out(color.yellow(`⚠ 配置里启用了不存在的规则：${input.unknownEnabled.join(', ')}`))
   }
-  for (const notice of input.notices) out(color.dim(`· ${notice.text}`))
+  for (const notice of input.notices) {
+    // `paths-no-match` 已经在结论行后面**前置**过（见 renderHeader），附录不重复
+    if (nothingJudged(input) && notice.code === 'paths-no-match') continue
+    out(color.dim(`· ${notice.text}`))
+  }
 }
 
 /** 报告里的一条例外（规则级） */
@@ -255,7 +276,7 @@ export interface ExceptionReport {
  * 而"必须动"由 `tests/report-contract.test.mjs` 的**冻结测试**保证 —— 否则版本号只是个装饰
  * （本仓刚在 `exempt` 上踩过"装饰性配置"：写了但没人读）。
  */
-export const REPORT_API_VERSION = 2
+export const REPORT_API_VERSION = 3
 
 export interface JsonReport {
   /** 报告契约版本（`REPORT_API_VERSION`） */

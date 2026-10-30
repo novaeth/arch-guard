@@ -341,6 +341,31 @@ export const requireTests: Rule = {
       }
       return false
     }
+    /**
+     * **间接覆盖**：测试 import 的若是**公开面 barrel**（只有再导出、没有自己的声明），
+     * 被它再导出的实现同样算"有测试" —— 否则"只测公开面"的写法会被 M08 全量报红，
+     * 宿主只能把 `requireTestsFor` 收缩成"每个文件都要直连测试"（那不是更严，是更假）。
+     *
+     * 只穿**再导出文件**：任意 import 链都算会让"测试 import 了入口"变成"全树都被覆盖"。
+     */
+    const isBarrel = (rel: string): boolean => {
+      const facts = ctx.facts.get(rel)
+      if (!facts || facts.exports.length === 0) return false
+      return facts.exports.every((entry) => entry.kind === 're-export' || entry.isStar)
+    }
+    const coveredViaBarrel = (target: string): boolean => {
+      const visited = new Set<string>()
+      const queue = [...(ctx.graph.importers.get(target) ?? [])]
+      while (queue.length > 0) {
+        const importer = queue.shift() as string
+        if (visited.has(importer)) continue
+        visited.add(importer)
+        if (testFiles.has(importer)) return true
+        if (!isBarrel(importer)) continue
+        for (const next of ctx.graph.importers.get(importer) ?? []) queue.push(next)
+      }
+      return false
+    }
     const out: Finding[] = []
     for (const record of ctx.records) {
       if (isTest(record.rel)) continue
@@ -348,7 +373,7 @@ export const requireTests: Rule = {
       const imported = [...(ctx.graph.importers.get(record.rel) ?? [])].some((importer) =>
         testFiles.has(importer),
       )
-      if (imported || paired(record.rel)) continue
+      if (imported || coveredViaBarrel(record.rel) || paired(record.rel)) continue
       out.push(
         finding(
           'M08',

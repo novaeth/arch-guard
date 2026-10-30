@@ -61,6 +61,7 @@ const baseInput = (overrides = {}) => ({
   skipped: [],
   unknownEnabled: [],
   notices: [],
+  paths: null,
   scope: 'full',
   scopeFiles: 0,
   globalFindings: 0,
@@ -168,6 +169,20 @@ test('report：通过时打印绿色结论，warn 不阻断', () => {
     ),
   )
   assert.match(text, /✔ 架构守卫通过（1 个 warn）/)
+})
+
+test('report：--paths 零匹配时首行不是 ✔，且 paths-no-match 自述前置', () => {
+  const input = baseInput({
+    paths: { requested: ['src/typo/**'], matched: 0 },
+    notices: [{ code: 'paths-no-match', text: '--paths 没有匹配到任何文件：src/typo/**' }],
+  })
+  const header = capture(() => renderHeader(input))
+  assert.doesNotMatch(header, /✔ 架构守卫通过/, '零命中不是"通过"（退出码是 2）')
+  assert.match(header, /✖ 架构守卫失败：--paths 一个文件都没匹配到/)
+  assert.match(header, /没有匹配到任何文件/, '自述必须前置到结论后面，别埋在附录')
+
+  const summary = capture(() => renderSummary(input))
+  assert.doesNotMatch(summary, /没有匹配到任何文件/, '前置过的自述不在附录重复')
 })
 
 test('report：停用规则与未知规则在 report 里明列（防「以为在跑」）', () => {
