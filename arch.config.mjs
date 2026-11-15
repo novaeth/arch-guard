@@ -90,5 +90,13 @@ export default {
     // 曾经的 `exempt: [{ glob: 'src/engine/output.ts' }]` 实测是**净 0**（console 那条规则 H03 已委派 eslint，
     // 本体没有规则会命中它），留着只会让人以为"这个文件免检"。真要写就写成：
     //   exceptions: [{ rule: 'H03', glob: 'src/engine/output.ts', reason: '…', expires: '2026-12-31' }]
+    structure: {
+      // S27 的默认目录预算（20）对这两层太紧：它们是"层模块家"的正常形态（R-169）。
+      // 用**角色级预算**给宽，而不是 exceptions —— 前者说"这类目录本来就宽"，后者才是"规则不适用"。
+      directoryItemLimits: [
+        { role: 'lib:engine', max: 60 },
+        { role: 'lib:presets', max: 40 },
+      ],
+    },
   },
 }

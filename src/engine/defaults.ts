@@ -23,6 +23,17 @@ export const DEFAULT_NAMING: NamingRules = {
 }
 
 /**
+ * **S27 的默认目录预算**：一个 product 目录的一级子项超过它就该拆（R-169）。
+ *
+ * 为什么默认开启：本工具面向 AI —— 非阻断建议不在 AI 的必做项里，只有红灯会改变它的行为。
+ * 为什么是 20：一个功能目录堆到 20 个一级子项已经很难扫读，40 这样的"病态线"对 AI 来得太晚；
+ * 20 也与本仓既有刻度一致（FSD 的 `shared/lib` 默认 15、S26 的组数量默认 20）。
+ * 天生更宽的目录（ui kit / 数据表 / locales / 库的层模块）用 `structure.directoryItemLimits`
+ * 按角色放行，而不是把默认值抬高到失去意义。
+ */
+export const DEFAULT_MAX_ITEMS_PER_DIR = 20
+
+/**
  * **达到这个层号就算"非业务代码"**（测试 / story）—— 全仓唯一出处（以前是散在 7 个文件里的
  * 19 处 `layer >= TEST_LAYER_MIN`，典型的魔法数字多处）。
  *

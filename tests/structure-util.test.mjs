@@ -9,6 +9,7 @@ import {
   finding,
   segmentMatches,
   unitDirOf,
+  unitDirsOf,
 } from '../es/packs/core/rules/structure-util.js'
 
 test('零件：角色 pattern 的目录部分（`dir/**` 与文件形态）', () => {
@@ -64,6 +65,33 @@ test('零件：单元目录（pattern 形态与兜底形态）', () => {
   )
   assert.equal(unitDirOf([{ id: 'r', pattern: 'src/shared/{seg}/index.ts' }], 'r', []), null)
   assert.equal(unitDirOf([{ id: 'r', pattern: 'src/a/x.ts' }], 'r', []), null, '拿不到就跳过')
+})
+
+test('零件：单元目录按角色 pattern 展开成实际目录（S27 参数化角色）', () => {
+  const roles = [
+    { id: 'module:components', pattern: 'src/modules/{domain}/components/**' },
+    { id: 'lib', pattern: 'src/shared/lib/**' },
+  ]
+  assert.deepEqual(
+    unitDirsOf(roles, 'module:components', [
+      { rel: 'src/modules/crews/components/A.tsx' },
+      { rel: 'src/modules/orders/components/B.tsx' },
+      { rel: 'src/modules/crews/components/ui/C.tsx' },
+    ]),
+    ['src/modules/crews/components', 'src/modules/orders/components'],
+    '同一个实际目录只出现一次；子目录不另算',
+  )
+  assert.deepEqual(
+    unitDirsOf(roles, 'lib', [{ rel: 'src/shared/lib/a.ts' }]),
+    ['src/shared/lib'],
+    'literal 角色行为不变',
+  )
+  assert.deepEqual(unitDirsOf(roles, 'lib', []), [], '没有任何记录 → 没有目录')
+  assert.deepEqual(
+    unitDirsOf([{ id: 'file', pattern: 'src/a/x.ts' }], 'file', [{ rel: 'src/a/x.ts' }]),
+    ['src/a'],
+    '文件形态的 pattern 也按目录段展开',
+  )
 })
 
 test('零件：分桶（同层 + 除本维度外的捕获）', () => {

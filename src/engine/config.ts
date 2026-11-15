@@ -177,6 +177,7 @@ const KNOWN_STRUCTURE_KEYS: Record<keyof StructureSpec, true> = {
   reservedNames: true,
   groupCountLimits: true,
   directoryItemLimits: true,
+  maxItemsPerDir: true,
   groupInDegree: true,
   nameCollisions: true,
   repetitiveNaming: true,

@@ -82,7 +82,8 @@ src/
     core/           共享规则实现（框架无关）
       index.ts        组装 coreRules（今天 tsPack / reactPack 共用同一份）
       rules/          107 条规则的实现：structure / structure-graph / structure-imports / structure-declared /
-                      structure-groups / structure-locality / structure-routes / structure-scan /
+                      structure-directory-limits / structure-groups / structure-locality / structure-routes /
+                      structure-scan /
                       structure-call-sites / structure-util / placement / face-forms /
                       design-tokens / design-vendor / design-styles / design-inline / design-numbers /
                       design-sources / design-shared /

@@ -85,6 +85,34 @@
 - 夹具 `__fixtures__/wheels` 补「四种误伤不报 × 五处漏判必报」；`tests/deps-fingerprints.test.mjs`
   加 css 记录零命中用例。见 R-167、DESIGN §16.2 / PARADIGM §12.2。
 
+### Fixed（R-168：S27 目录子项数上限 —— 参数化角色空转 / 增量模式丢报）
+
+> **行为变更**：报告格式 / 退出码 / `apiVersion` / 配置键不变。
+> 已声明 `structure.directoryItemLimits`、但角色 pattern 带捕获（`{domain}` / `{slice}` / `{segment}`）的项目，
+> 这条规则从"静默不判"变成"真的判" —— 阈值与角色不变，可能开始报出此前漏掉的超限目录。
+
+- `unitDirsOf` 按角色 pattern 的目录段展开成**实际目录**：`src/modules/{domain}/components/**`
+  分别数每个域的真实 `components/`，不再把 `{domain}` 当字面路径后 0 命中跳过（canonical 的 `module:*`、
+  FSD 的 layer / slice 角色都受影响；`fsd:shared:lib` 这类字面目录行为不变）。
+- S27 的发现项标记 `global`：`--scope=changed` 默认仍阻断（`--local-only` 才跳过并自述）。
+  以前锚在目录内字典序第一个旧文件上，新增文件把目录顶爆时会被增量过滤掉。
+- 夹具 `__fixtures__/structure-limits` 增加参数化角色 `pages:ui`（超限切片必报 × 未超限不报）；
+  `tests/structure-groups-rules.test.mjs` / `tests/structure-util.test.mjs` 同步。见 R-168、DESIGN §5.1。
+
+### Changed（R-169：S27 默认目录预算 —— 给 AI 的红线）
+
+> **行为变更，可能开始报出此前漏掉的目录**：新增配置键 `structure.maxItemsPerDir`（默认 20）。
+> `apiVersion` / `NOTICE_CODES` / `SKIP_CODES` / 退出码语义不变。
+> 迁移：合法的平铺目录（数据表 / locales / 图标 / 库的层模块）用 `structure.directoryItemLimits`
+> 给该角色更高的 `max`（推荐），或用 `exceptions` 声明 S27 并写 `reason`；要整条关掉用 `disable: ['S27']`。
+
+- S27 不再只在宿主点名时判：默认预算 20 覆盖**所有 product 角色目录**（按角色 pattern 展开的实际目录）。
+  `directoryItemLimits` 按角色覆盖默认值；`structure.maxItemsPerDir` 可全局调整。
+- 计数口径：一级子项 = 文件 + 子目录；**测试脚手架不计**（与 S16 同口径），`foldersOnly` 仍只数子目录。
+- 报文带 AI 处方：拆到已有角色 / 域、不要新建 `utils / common / misc`；合法平铺目录给出声明方式。
+- 本仓 `lib:engine` 60 / `lib:presets` 40（都是层模块家，不是例外）；夹具
+  `__fixtures__/structure-limits` 补默认预算必报 × 显式覆盖不报 × 测试不计。见 R-169、DESIGN §5.1。
+
 ### Added（R-154：自定义 capability —— 宿主可以登记本体没有的能力）
 
 - `deps({ capabilities })` 的值除字符串（`{ datetime: 'dayjs' }`）外，新增**对象形态**：

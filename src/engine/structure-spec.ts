@@ -67,7 +67,7 @@ export interface GroupCountLimit {
 
 /** 目录一级子项数上限（S27） */
 export interface DirectoryItemLimit {
-  /** 角色 id：命中它的文件归拢成目录 */
+  /** 角色 id：按它 pattern 匹配到的**实际目录**分别计数（`{domain}` 会展开成每个域的真实目录） */
   role: string
   max: number
   /** 只数一级子目录、不数文件 */
@@ -190,6 +190,11 @@ export interface StructureSpec {
   groupCountLimits?: GroupCountLimit[]
   /** 目录一级子项数上限（S27） */
   directoryItemLimits?: DirectoryItemLimit[]
+  /**
+   * 所有 product 目录的**默认**一级子项预算（S27）。不声明时用引擎默认值（20）；
+   * 想给某个角色更宽 / 更严的预算，用 `directoryItemLimits` 覆盖。
+   */
+  maxItemsPerDir?: number
   /** 组的外部引用组数下限（S28） */
   groupInDegree?: GroupInDegree[]
   /** 组名与保留词汇的重名（S29） */
@@ -228,6 +233,7 @@ export interface ResolvedStructure {
   reservedNames: string[]
   groupCountLimits: GroupCountLimit[]
   directoryItemLimits: DirectoryItemLimit[]
+  maxItemsPerDir: number
   groupInDegree: GroupInDegree[]
   nameCollisions: NameCollisionSpec[]
   repetitiveNaming: string[]

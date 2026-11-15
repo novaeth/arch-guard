@@ -1,3 +1,4 @@
+import { DEFAULT_MAX_ITEMS_PER_DIR } from './defaults.js'
 import type {
   FaceSpec,
   ResolvedStructure,
@@ -61,6 +62,7 @@ export function mergeStructureSpec(
     reservedNames: union(prev.reservedNames, next.reservedNames),
     groupCountLimits: [...(prev.groupCountLimits ?? []), ...(next.groupCountLimits ?? [])],
     directoryItemLimits: [...(prev.directoryItemLimits ?? []), ...(next.directoryItemLimits ?? [])],
+    maxItemsPerDir: next.maxItemsPerDir ?? prev.maxItemsPerDir,
     groupInDegree: [...(prev.groupInDegree ?? []), ...(next.groupInDegree ?? [])],
     nameCollisions: [...(prev.nameCollisions ?? []), ...(next.nameCollisions ?? [])],
     repetitiveNaming: union(prev.repetitiveNaming, next.repetitiveNaming),
@@ -129,6 +131,9 @@ export function resolveStructure(input: {
       preset?.directoryItemLimits ?? [],
       overrides?.directoryItemLimits ?? [],
     ),
+    // 单值声明：overrides 给了就用 overrides；谁都没给就用引擎默认（R-169：默认开启）
+    maxItemsPerDir:
+      overrides?.maxItemsPerDir ?? preset?.maxItemsPerDir ?? DEFAULT_MAX_ITEMS_PER_DIR,
     groupInDegree: mergeKeyed(
       'groupInDegree',
       (item) => item.dimension,
@@ -251,6 +256,7 @@ function validate(structure: ResolvedStructure, roles: RoleDescriptor[]): void {
   for (const item of structure.directoryItemLimits) {
     needIntegers('directoryItemLimits.max', [item.max])
   }
+  needIntegers('maxItemsPerDir', [structure.maxItemsPerDir])
   for (const item of structure.groupInDegree) needIntegers('groupInDegree.min', [item.min])
   for (const item of structure.degreeLimits) {
     needIntegers('degreeLimits.maxIn', [item.maxIn])

@@ -17,6 +17,7 @@ import { declaredStructureRules } from './rules/structure-declared.js'
 import { structureGraphRules } from './rules/structure-graph.js'
 import { structureImportRules } from './rules/structure-imports.js'
 import { structureGroupRules } from './rules/structure-groups.js'
+import { directoryItemLimits } from './rules/structure-directory-limits.js'
 import { structureBoundaryRules } from './rules/structure-boundaries.js'
 import { structureCallSiteRules } from './rules/structure-call-sites.js'
 import { structureDisciplineRules } from './rules/structure-discipline.js'
@@ -44,6 +45,7 @@ export const coreRules: Rule[] = [
   ...structureImportRules,
   ...declaredStructureRules,
   ...structureGroupRules,
+  directoryItemLimits,
   ...structureLocalityRules,
   ...structureCallSiteRules,
   ...structureBoundaryRules,

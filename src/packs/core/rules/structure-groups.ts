@@ -2,7 +2,7 @@ import { TEST_LAYER_MIN } from '../../../engine/defaults.js'
 import type { Finding, Rule } from '../../../engine/types.js'
 
 import { NEUTRAL_WORDS, classifyWord, toPlural, toSingular } from '../../../data/plural-forms.js'
-import { bucketsOf, dirOfPattern, extraDirsOf, finding, unitDirOf } from './structure-util.js'
+import { bucketsOf, dirOfPattern, extraDirsOf, finding } from './structure-util.js'
 
 /**
  * 声明驱动的**组与目录**规则：组完整性（S35）· 保留名目录（S25）· 规模阈值（S26/S27）。
@@ -159,56 +159,6 @@ export const groupCountLimits: Rule = {
           ),
         )
       }
-    }
-    return out
-  },
-}
-
-/* ---------------- S27 目录子项数上限 ---------------- */
-
-/**
- * 判据：角色目录的**一级子项**超过 `max` → 报（锚在该目录内字典序最小的文件上）。
- *
- * 默认数"文件 + 子目录"（社区 linter 的 `shared/lib` 就是这个口径）；
- * `foldersOnly: true` 时只数子目录。宿主可给任意角色 —— 规则里没有 `shared/lib` 这个词。
- */
-export const directoryItemLimits: Rule = {
-  id: 'S27',
-  domain: 'structure',
-  level: 'L3',
-  severity: 'error',
-  title: '目录子项数上限',
-  hint: '一个目录里堆太多模块说明该分组了（shared/lib 是最常见的一个）；阈值在 structure.directoryItemLimits 里调',
-  run: (ctx) => {
-    const limits = ctx.config.structure.directoryItemLimits ?? []
-    if (limits.length === 0) return []
-    const out: Finding[] = []
-    for (const limit of limits) {
-      const roleRecords = ctx.records.filter((record) => record.role === limit.role)
-      const dir = unitDirOf(ctx.config.roles, limit.role, roleRecords)
-      if (dir === null) continue
-      const members = ctx.records
-        .map((record) => record.rel)
-        .filter((rel) => rel.startsWith(`${dir}/`))
-        .sort()
-      if (members.length === 0) continue
-      const children = new Set<string>()
-      for (const rel of members) {
-        const rest = rel.slice(dir.length + 1)
-        const [head, ...tail] = rest.split('/')
-        if (head === undefined || head === '') continue
-        if (limit.foldersOnly === true && tail.length === 0) continue
-        children.add(head)
-      }
-      if (children.size <= limit.max) continue
-      out.push(
-        finding(
-          'S27',
-          members[0] as string,
-          1,
-          `${dir} 有 ${children.size} 个一级子项，超过上限 ${limit.max}：按用途分子目录，别让一个目录变成杂物间`,
-        ),
-      )
     }
     return out
   },
@@ -468,7 +418,6 @@ export const structureGroupRules: Rule[] = [
   segmentedGroups,
   reservedFolderNames,
   groupCountLimits,
-  directoryItemLimits,
   groupInDegree,
   nameCollisions,
   repetitiveNaming,

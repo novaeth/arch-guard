@@ -51,6 +51,39 @@ export function dirPatternSegments(pattern: string): string[] | null {
   return segments.length >= 2 && segments[0] !== '' ? segments : null
 }
 
+/**
+ * 角色 pattern 下**实际存在的单元目录**（S27）：把 pattern 的目录段按记录展开成真实路径。
+ *
+ * 为什么不能只用 `unitDirOf`：它把 `src/modules/{domain}/components/**` 直接去掉 `**`，
+ * 得到带 `{domain}` 的字面路径 —— 拿它去匹配记录永远 0 命中，规则静默空转。
+ * 这里按 pattern 的目录段数取每条记录的前 N 段：
+ * `src/modules/{domain}/components/**` → `src/modules/crews/components`、`src/modules/orders/components`。
+ * pattern 拿不到目录段时退回 `unitDirOf`（字面目录 / 公共目录），两者都拿不到就跳过。
+ */
+export function unitDirsOf(
+  roles: { id: string; pattern: string }[],
+  roleId: string,
+  records: { rel: string }[],
+): string[] {
+  const pattern = roles.find((role) => role.id === roleId)?.pattern
+  const segments = pattern === undefined ? null : dirPatternSegments(pattern)
+  if (segments === null) {
+    const dir = unitDirOf(roles, roleId, records)
+    return dir === null ? [] : [dir]
+  }
+  const dirs = new Set<string>()
+  for (const record of records) {
+    const parts = record.rel.split('/')
+    // 最后一段是文件名；目录段不够时说明这条记录不在角色目录下，跳过
+    if (parts.length <= segments.length) continue
+    // pattern 与路径对不上（角色表被改过 / 记录不是这条角色的）时跳过 —— 与 extraDirsOf 同口径
+    if (!segments.every((segment, index) => segmentMatches(segment, parts[index] as string)))
+      continue
+    dirs.add(parts.slice(0, segments.length).join('/'))
+  }
+  return [...dirs].sort()
+}
+
 /** 一个路径段能否被 pattern 里的段匹配（`{name}` 匹配任意一段；`{a,b}` 按枚举匹配） */
 export function segmentMatches(patternSegment: string, actual: string): boolean {
   if (!patternSegment.includes('{')) return patternSegment === '*' || patternSegment === actual

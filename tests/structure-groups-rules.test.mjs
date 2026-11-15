@@ -229,6 +229,68 @@ test('S27 目录子项数：角色一条记录都没有时跳过（宁少报不�
   )
 })
 
+test('S27 参数化角色按实际目录分别计数，目录级发现项标 global', () => {
+  const roles = [
+    { id: 'module:components', pattern: 'src/modules/{domain}/components/**', layer: 10 },
+  ]
+  const records = [
+    record('src/modules/crews/components/A.tsx', { layer: 10, role: 'module:components' }),
+    record('src/modules/crews/components/B.tsx', { layer: 10, role: 'module:components' }),
+    record('src/modules/crews/components/ui/C.tsx', { layer: 10, role: 'module:components' }),
+    record('src/modules/orders/components/D.tsx', { layer: 10, role: 'module:components' }),
+  ]
+  const findings = run(
+    'S27',
+    context({
+      records,
+      roles,
+      structure: { directoryItemLimits: [{ role: 'module:components', max: 1 }] },
+    }),
+  )
+  assert.equal(findings.length, 1, '只有 crews 超限（ui 子目录算一个一级子项）')
+  assert.equal(findings[0].file, 'src/modules/crews/components/A.tsx', '锚在该目录字典序最小的文件')
+  assert.match(findings[0].text, /src\/modules\/crews\/components/)
+  assert.equal(findings[0].global, true, '目录级谓词必须标 global（增量模式不丢报）')
+})
+
+test('S27 默认预算：没人声明的目录也判，测试脚手架不计', () => {
+  const roles = [
+    { id: 'test', pattern: '**/*.test.ts', layer: 99, exclusive: true },
+    { id: 'items', pattern: 'src/items/**', layer: 1 },
+    { id: 'mixed', pattern: 'src/mixed/**', layer: 1 },
+  ]
+  const records = [
+    record('src/items/a.ts', { role: 'items' }),
+    record('src/items/b.ts', { role: 'items' }),
+    record('src/items/c.ts', { role: 'items' }),
+    record('src/mixed/a.ts', { role: 'mixed' }),
+    record('src/mixed/b.ts', { role: 'mixed' }),
+    record('src/mixed/x.test.ts', { role: 'test', layer: 99 }),
+    record('src/mixed/y.test.ts', { role: 'test', layer: 99 }),
+  ]
+  const findings = run('S27', context({ records, roles, structure: { maxItemsPerDir: 2 } }))
+  assert.equal(findings.length, 1, 'items 超限；mixed 扣掉测试只剩 2 个，不报')
+  assert.equal(findings[0].file, 'src/items/a.ts')
+  assert.match(findings[0].text, /默认上限/)
+  assert.equal(findings[0].global, true)
+})
+
+test('S27 显式角色预算可以比默认更宽', () => {
+  const roles = [{ id: 'data', pattern: 'src/data/**', layer: 1 }]
+  const records = Array.from({ length: 4 }, (_, index) =>
+    record(`src/data/t${index}.ts`, { role: 'data' }),
+  )
+  const findings = run(
+    'S27',
+    context({
+      records,
+      roles,
+      structure: { maxItemsPerDir: 2, directoryItemLimits: [{ role: 'data', max: 5 }] },
+    }),
+  )
+  assert.deepEqual(findings, [], '显式预算 5 覆盖默认 2')
+})
+
 test('S28 外部引用下限：0 个必报、只被 app 引用放过、pages 层整层跳过、同层引用不计', () => {
   const records = [
     record('src/features/dead/index.ts', {

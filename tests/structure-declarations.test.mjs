@@ -29,6 +29,7 @@ test('结构声明：没声明时每个字段都补齐（数组为空、布尔�
   assert.deepEqual(resolved.reservedNames, [])
   assert.deepEqual(resolved.groupCountLimits, [])
   assert.deepEqual(resolved.directoryItemLimits, [])
+  assert.equal(resolved.maxItemsPerDir, 20, 'S27 的默认预算：没声明也要有（面向 AI，默认开启）')
   assert.deepEqual(resolved.groupInDegree, [])
   assert.deepEqual(resolved.nameCollisions, [])
   assert.deepEqual(resolved.repetitiveNaming, [])

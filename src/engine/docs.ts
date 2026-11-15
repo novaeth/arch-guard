@@ -113,6 +113,20 @@ const renderStructure: DocBlockRenderer = (config) =>
           : '（未声明）',
         'S23',
       ],
+      [
+        '`maxItemsPerDir`',
+        `默认目录预算：${String(config.structure.maxItemsPerDir)} 个一级子项（product 目录）`,
+        'S27',
+      ],
+      [
+        '`directoryItemLimits`',
+        config.structure.directoryItemLimits.length > 0
+          ? config.structure.directoryItemLimits
+              .map((item) => `${code(item.role)} ≤ ${String(item.max)}`)
+              .join(' · ')
+          : '（未声明：全部用默认预算）',
+        'S27',
+      ],
     ],
   )
 

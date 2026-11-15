@@ -482,7 +482,7 @@
 
 ## 七、后补的需求（按疼度排序）
 
-> **开着的：没有了**（`进行中` 0）—— 全部条目都已定：`已完成` 153 · `已委派` 4 · `不做` 7（R-04 / R-49 / R-50 / R-51 / R-52 / R-53 / R-109）。
+> **开着的：没有了**（`进行中` 0）—— 全部条目都已定：`已完成` 155 · `已委派` 4 · `不做` 7（R-04 / R-49 / R-50 / R-51 / R-52 / R-53 / R-109）。
 > **已撤**：R-30 复杂度 · R-70 抑制注释 · **R-94（analytics 面 kit 化）** —— 编号登记在第八节，不复用（见 N-06 / N-07 / N-13）。
 > 本节是**后补的一批**（含已完成与判不做的），按疼度排序；更早的按主题分散在一~六节。
 
@@ -1750,6 +1750,46 @@ messageProps: ['message', 'description', 'title'] })` —— 这两张表是 **a
   夹具 `__fixtures__/wheels`（四种误伤不报 × 五处漏判必报）；单测
   `tests/wheel-fingerprints.test.mjs` / `tests/deps-fingerprints.test.mjs`；`docs/DESIGN.md` §16、
   `PARADIGM.md` §12 同步；CHANGELOG `[Unreleased]`
+
+**R-168 目录子项数上限对参数化角色静默空转，且增量模式会丢报** · 已完成 · 本体（S27 修正）
+
+- **长这样（空转）**：`canonical()` 下 `src/modules/crews/components/` 堆到 20 个文件，宿主按文档声明
+  `structure.directoryItemLimits: [{ role: 'module:components', max: 15 }]`，门禁仍然全绿 ——
+  角色 pattern 是 `src/modules/{domain}/components/**`，S27 把 `{domain}` 当字面段，`members` 恒为空后静默跳过
+  （`examples/full` 里那条 15 就是这种空声明）。FSD 的 layer / slice 角色同理；只有 `fsd:shared:lib`
+  这类字面目录能工作
+- **长这样（增量丢报）**：同一个目录已经超限，但这次只改了其中一个文件、用 `--scope=changed` 跑：
+  S27 锚在目录内字典序第一个文件上，那个文件通常不在变更集里，发现项被过滤掉
+- **会怎样**：目录文件数无限增长时，门禁要么"配了没反应"，要么"增量跑看不见"；宿主只能靠人 review
+  撞见，等看见时目录已经成了杂物间
+- **期望**：① S27 按角色 pattern 匹配到的**实际目录**分别计数（`src/modules/{domain}/components/**` →
+  每个域的真实 `components/`；literal 角色行为不变）；② 目录级发现项标记 `global`，`--scope=changed`
+  默认仍阻断（`--local-only` 才跳过，并按既有约定自述条数）；③ 保持既有口径：一级子项 = 文件 + 子目录，
+  `foldersOnly` 只数子目录；④ **不新增默认预算** —— 阈值仍由宿主声明（"多少算多"随目录种类变化，
+  默认值另立需求）
+- **落地**：`src/packs/core/rules/structure-util.ts`（`unitDirsOf`）· `src/packs/core/rules/structure-groups.ts`
+  （S27）· `src/engine/structure-spec.ts`（字段注释）；夹具 `__fixtures__/structure-limits`
+  （`pages:ui` 参数化角色：超限的切片必报 × 未超限不报）；单测 `tests/structure-groups-rules.test.mjs` /
+  `tests/structure-util.test.mjs`；`docs/DESIGN.md` §5.1、`docs/USAGE.md` §1.1 同步；CHANGELOG `[Unreleased]`
+
+**R-169 目录子项预算默认关闭 → 未声明的目录没人盯** · 已完成 · 本体（S27 默认预算）
+
+- **长这样**：项目里没人给 `views/` 声明 `directoryItemLimits`，它从 8 个文件长到 45 个；门禁一直绿 ——
+  S27 只在"宿主点名"时才判。报告里的架构建议（`group-granularity`）是**非阻断**的：
+  AI 的目标是让门禁通过，建议不在它的必做项里，所以给了建议也不会改
+- **会怎样**：目录文件数无限增长，直到人 review 撞见；而本工具是给 AI 用的，人根本不会看建议
+- **期望**：① S27 **默认开启**：`structure.maxItemsPerDir`（默认 20）覆盖所有 product 角色目录，
+  未声明也会阻断；② `directoryItemLimits` 按角色覆盖默认值（可更严也可更宽）；
+  ③ 计数口径保持"一级子项 = 文件 + 子目录"，但**测试脚手架不计**（与 S16 同口径）；
+  ④ 报错文案给 AI 处方：拆到已有角色 / 域、不要新建 `utils` / `common` / `misc`，
+  合法平铺目录用角色级更高预算（或 `exceptions` 写明 reason）；⑤ 本仓 `lib:engine` 60 / `lib:presets` 40
+  （都是层模块家，不是例外）
+- **落地**：`src/engine/defaults.ts`（`DEFAULT_MAX_ITEMS_PER_DIR`）· `src/engine/structure-spec.ts` /
+  `structure.ts` / `config.ts`（`maxItemsPerDir` 声明与校验）· `src/engine/docs.ts` ·
+  `src/packs/core/rules/structure-groups.ts`（S27）· `arch.config.mjs`（`lib:engine` 60 / `lib:presets` 40）；
+  夹具 `__fixtures__/structure-limits`（默认预算必报 × 显式覆盖不报 × 测试不计）；
+  单测 `tests/structure-groups-rules.test.mjs`；`docs/DESIGN.md` §5.1、`docs/USAGE.md` §1.1 同步；
+  CHANGELOG `[Unreleased]`
 
 ## 八、不做（写在这里是为了不再重复讨论）
 
