@@ -17,6 +17,19 @@
 
 ## [Unreleased]
 
+### Changed（R-164：S16 体积阈值改按**代码行**判）
+
+> **行为变更，方向是"少报"**：契约面（`apiVersion` / `NOTICE_CODES` / `SKIP_CODES` / 退出码）不变，
+> 配置键与默认值也不变 —— 不需要改配置。
+
+- S16 的 `fileLines` / `viewLines` 现在量**代码行**：空行与整行注释不计（行尾注释所在行照算），
+  默认值仍是 500 / 500。以前注释密集的文件会被体积红线逼着删注释 —— 红线在惩罚写文档。
+- 报告文案改为「文件代码 N 行，超过上限 N」；`--render-docs` 生成的阈值表标签同步为
+  「文件代码行 / 页面代码行」。
+- 事实模型新增 `codeLineCount`（`lineCount` 仍是原始行数）→ `FACTS_CACHE_SPEC` 11 → 12，旧缓存自动作废。
+- 夹具 `__fixtures__/rules` 新增「原始行超阈值、代码行不超 → 不报」的合规样例；
+  `tests/rule-applies-to.test.mjs` 同时钉住 `big.ts` 仍报。见 R-164、DESIGN §5.1 / §6.2.1。
+
 ### Added（R-154：自定义 capability —— 宿主可以登记本体没有的能力）
 
 - `deps({ capabilities })` 的值除字符串（`{ datetime: 'dayjs' }`）外，新增**对象形态**：

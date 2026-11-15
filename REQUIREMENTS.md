@@ -482,7 +482,7 @@
 
 ## 七、后补的需求（按疼度排序）
 
-> **开着的：没有了**（`进行中` 0）—— 全部条目都已定：`已完成` 149 · `已委派` 4 · `不做` 7（R-04 / R-49 / R-50 / R-51 / R-52 / R-53 / R-109）。
+> **开着的：没有了**（`进行中` 0）—— 全部条目都已定：`已完成` 150 · `已委派` 4 · `不做` 7（R-04 / R-49 / R-50 / R-51 / R-52 / R-53 / R-109）。
 > **已撤**：R-30 复杂度 · R-70 抑制注释 · **R-94（analytics 面 kit 化）** —— 编号登记在第八节，不复用（见 N-06 / N-07 / N-13）。
 > 本节是**后补的一批**（含已完成与判不做的），按疼度排序；更早的按主题分散在一~六节。
 
@@ -1662,6 +1662,21 @@ messageProps: ['message', 'description', 'title'] })` —— 这两张表是 **a
   夹具补「违规必报 × 合规不报」（`__fixtures__/missing-export` 同时含两种形态）
 - **落地**：`src/packs/core/rules/structure-imports.ts` + `tests/structure-imports.test.mjs` +
   `__fixtures__/missing-export`；CHANGELOG `[Unreleased]`
+
+**R-164 S16 按原始行数判 → 注释写得多的文件被逼着删注释** · 已完成 · 本体（事实模型加代码行计数）
+
+- **长这样**：`src/engine/types.ts` 约 500 行里近三分之一是契约说明（每个字段为什么存在）；S16 报
+  「文件 500 行，超过上限 500」，唯一解法是拆文件或删注释。宿主刚给公开类型补一段 JSDoc，行数越线、
+  CI 红了 —— 删掉注释就绿。
+- **会怎样**：体积阈值本该量"读起来有多长"，却把空行与**整行注释**当成同等负担；结果是惩罚写文档，
+  而注释恰恰是引擎 / 库代码最该有的东西（本仓自己就被它逼着拆过 `types.ts` / `run.ts` / `facts.ts`）
+- **期望**：`fileLines` / `viewLines` 改量**代码行**（空行与整行注释不计，行尾注释所在行照算），
+  默认值仍是 500 / 500；报告文案与 `--render-docs` 的阈值表标签写明「代码行」；`lineCount` 保留原始行数，
+  新增 `codeLineCount`（事实形状变了 → `FACTS_CACHE_SPEC` 11 → 12）
+- **落地**：`src/engine/facts-syntax.ts`（`countCodeLines`）· `src/engine/facts.ts` · `src/engine/facts-cache.ts` ·
+  `src/packs/core/rules/structure.ts`（S16）· `src/engine/docs.ts`；夹具 `__fixtures__/rules`（注释密集、
+  原始行超阈值但代码行不超 → 不报）；单测 `tests/rule-applies-to.test.mjs`；`docs/USAGE.md` /
+  `docs/DESIGN.md` §5.1 / §6.2.1 同步；CHANGELOG `[Unreleased]`
 
 ## 八、不做（写在这里是为了不再重复讨论）
 

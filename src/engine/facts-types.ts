@@ -133,6 +133,8 @@ export interface Facts {
   rel: string
   role: string
   lineCount: number
+  /** 代码行（空行与整行注释不计）：S16 量体积用它，`lineCount` 是原始行数 */
+  codeLineCount: number
   parseErrors: ParseErrorFact[]
   imports: ImportFact[]
   exports: ExportFact[]

@@ -150,7 +150,7 @@ test('渲染只改块内内容：块外的散文与别的块一字不动', async
     assert.deepEqual(rendered.changed, ['thresholds'])
     assert.match(rendered.text, /^前言\n/)
     assert.match(rendered.text, /后记\n$/)
-    assert.match(rendered.text, /\| 文件行数 \| 500 \| S16 \|/)
+    assert.match(rendered.text, /\| 文件代码行 \| 500 \| S16 \|/)
     assert.equal(/旧内容/.test(rendered.text), false)
     // 幂等：再渲染一次不该再有变化
     assert.deepEqual(renderDocText(rendered.text, config).changed, [])
@@ -201,7 +201,7 @@ test('--check-docs：块与 config 不一致即红，并指名文件与块', asy
     const render = await runCli(['--render-docs'], dir)
     assert.equal(render.code, 0)
     assert.match(render.out, /已更新 NOTES\.md：thresholds/)
-    assert.match(readFileSync(join(dir, 'NOTES.md'), 'utf8'), /\| 文件行数 \| 500 \| S16 \|/)
+    assert.match(readFileSync(join(dir, 'NOTES.md'), 'utf8'), /\| 文件代码行 \| 500 \| S16 \|/)
 
     const again = await runCli(['--check-docs'], dir)
     assert.equal(again.code, 0, again.out + again.err)

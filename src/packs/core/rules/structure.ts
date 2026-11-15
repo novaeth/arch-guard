@@ -283,12 +283,13 @@ export const sizeLimits: Rule = {
       // 「页面级」由角色表声明（`pageLike`）—— 只看 `slot === 'views'` 会让 library / fsd 下
       // 的 viewLines 静默失效（配了也不生效）
       const limit = record.pageLike === true || record.slot === 'views' ? viewLines : fileLines
-      if (facts.lineCount > limit) {
+      // 代码行（R-164）：空行与整行注释不计 —— 否则红线在惩罚写文档
+      if (facts.codeLineCount > limit) {
         out.push({
           rule: 'S16',
           file: record.rel,
           line: 1,
-          text: `文件 ${facts.lineCount} 行，超过上限 ${limit}`,
+          text: `文件代码 ${facts.codeLineCount} 行，超过上限 ${limit}`,
           hint: '拆成更小的单元',
           anchorKind: 'file',
         })

@@ -21,7 +21,7 @@ import type { Facts, FileRecord } from './types.js'
  */
 
 /** 事实模型 / 提取逻辑的版本。**改 `facts.ts` 的产出形状时必须 +1**，否则旧缓存会被复用。 */
-export const FACTS_CACHE_SPEC = '11'
+export const FACTS_CACHE_SPEC = '12'
 
 export const CACHE_DIR = '.arch-guard-cache'
 const CACHE_FILE = 'facts.json.gz'

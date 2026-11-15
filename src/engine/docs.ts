@@ -67,8 +67,8 @@ const renderThresholds: DocBlockRenderer = (config) =>
   table(
     ['阈值', '值', '被判的规则'],
     [
-      ['文件行数', String(config.thresholds.fileLines), 'S16'],
-      ['页面行数', String(config.thresholds.viewLines), 'S16'],
+      ['文件代码行', String(config.thresholds.fileLines), 'S16'],
+      ['页面代码行', String(config.thresholds.viewLines), 'S16'],
       ['函数行数', String(config.thresholds.functionLines), 'S16'],
       ['单文件导出值', String(config.thresholds.exportsPerFile), 'S19'],
       ['单文件组件数', String(config.thresholds.componentsPerFile), 'S19'],

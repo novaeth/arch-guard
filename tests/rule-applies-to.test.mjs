@@ -38,9 +38,17 @@ test('appliesTo：S16 / P06 声明为 product，且测试脚手架不再产生�
     false,
     '测试脚手架超过体积阈值不该报 S16',
   )
-  assert.ok(
-    rulesFixture.all.some((finding) => finding.rule === 'S16' && finding.file.endsWith('big.ts')),
-    '产品代码超过体积阈值仍然要报',
+  const bigFinding = rulesFixture.all.find(
+    (finding) => finding.rule === 'S16' && finding.file.endsWith('big.ts'),
+  )
+  assert.ok(bigFinding, '产品代码超过体积阈值仍然要报')
+  assert.match(bigFinding.text, /文件代码 \d+ 行/, '文案要写明量的是代码行（R-164）')
+  assert.equal(
+    rulesFixture.all.some(
+      (finding) => finding.rule === 'S16' && finding.file.endsWith('commented.ts'),
+    ),
+    false,
+    '空行与整行注释不算体积：原始行超阈值、代码行不超时不该报 S16',
   )
 
   const depsFixture = await runGuard({

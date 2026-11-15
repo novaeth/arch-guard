@@ -5,6 +5,7 @@ import {
   carriesProp,
   collectComments,
   containsJsx,
+  countCodeLines,
   declaredPropOf,
   lineOf,
   positionOf,
@@ -76,6 +77,9 @@ export interface FactInput {
  *
  * **R-128（列号）**：所有带位置的事实多了一个 `column`（行 + 列，都从 1 起）—— 报告与 `--format=github`
  * 注解据此印 `file:line:col`，编辑器/CI 能跳到列。值变了 → `FACTS_CACHE_SPEC` 10 → **11**。
+ *
+ * **R-164（代码行）**：新增 `codeLineCount`（S16 改读它：空行与整行注释不计），`lineCount` 仍是原始行数。
+ * 形状变了 → `FACTS_CACHE_SPEC` 11 → **12**。
  */
 /**
  * import / re-export → 事实（S45 的名字对账、依赖图、C07 的语言对账都读它）。
@@ -188,6 +192,7 @@ export function extractFacts(input: FactInput): Facts {
     rel,
     role,
     lineCount: text.split('\n').length,
+    codeLineCount: countCodeLines(text, positioned),
     parseErrors: (sf.parseDiagnostics ?? []).map((diagnostic) => ({
       line: diagnostic.start === undefined ? 1 : lineOf(sf, diagnostic.start),
       message: ts.flattenDiagnosticMessageText(diagnostic.messageText, ' '),

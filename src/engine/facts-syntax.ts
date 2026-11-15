@@ -52,6 +52,31 @@ export function collectComments(
 }
 
 /**
+ * **代码行计数**（S16 的判据，R-164）：去掉空行与**整行注释**后的行数。
+ *
+ * 为什么不用 `text.split('\n').length`：那样注释与空行和代码一样吃体积预算，等于惩罚写文档 ——
+ * 引擎 / 库代码的契约说明恰恰是最该留的部分。注释区间来自 `collectComments`（TS scanner，
+ * 字符串里的 `//` 不会被误判）；行尾注释所在行仍算代码行（该行有代码）。
+ */
+export function countCodeLines(
+  text: string,
+  comments: ReadonlyArray<{ pos: number; end: number }>,
+): number {
+  // 注释区间替换成空格（保留换行）→ 纯注释行变成空行，再数非空行
+  const parts: string[] = []
+  let at = 0
+  for (const { pos, end } of comments) {
+    parts.push(text.slice(at, pos), text.slice(pos, end).replace(/[^\n]/g, ' '))
+    at = end
+  }
+  parts.push(text.slice(at))
+  return parts
+    .join('')
+    .split('\n')
+    .filter((line) => line.trim() !== '').length
+}
+
+/**
  * 「最近属性名」的**透传容器**：数组 / 对象 / 括号 / 断言 / 展开 / 三元不改变它。
  *
  * 为什么要穿透：`useQuery({ queryKey: ['crews', id] })` 里那个字面量的直接父节点是**数组**，

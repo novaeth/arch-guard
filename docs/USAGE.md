@@ -80,7 +80,7 @@ export default {
 | `aliases`            | `Record<string, string>`             | 别名映射（默认从 `tsconfig.json` 的 `paths` 读）                                                                                                             |
 | `enable` · `disable` | `string[] \| 'all'`                  | 规则开关（`disable` 在 `enable` 求完之后再减）。**`disable` 是整条关掉** → 报告会自述停用了哪几条；只想对某类文件豁免，用 `exceptions`（要理由，可写到到期） |
 | `severity`           | `Record<string, 'error'\|'warn'>`    | **逐规则严重度覆盖**（只项目层能写）：先看见、暂不拦，不用整条关规则；报告 / 退出码 / JSON 同一处生效（见 §5.8）                                             |
-| `thresholds`         | 对象                                 | 行数 / 导出数 / 组件数阈值（S16 / S19）                                                                                                                      |
+| `thresholds`         | 对象                                 | 行数 / 导出数 / 组件数阈值（S16 / S19）。行数按**代码行**计：空行与整行注释不计，行尾注释所在行照算                                                          |
 | `naming`             | 对象                                 | `hookPrefix` / `viewSuffix`（S12 / S13 的词汇）                                                                                                              |
 | `structure`          | 对象                                 | 层序 / 组隔离 / 公开面声明（S21–S23、S32、S39–S43 的判据来源）                                                                                               |
 | `entries`            | `string[]`                           | 额外入口（可达性分析用）                                                                                                                                     |
