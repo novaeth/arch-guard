@@ -7,6 +7,10 @@
     {
       "rule": "S35",
       "file": "src/pages/empty/index.ts"
+    },
+    {
+      "rule": "S47",
+      "file": "src/pages/a/ui/A1.ts"
     }
   ],
   "exact": true

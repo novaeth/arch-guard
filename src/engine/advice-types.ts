@@ -11,7 +11,6 @@ export const ADVICE_SIGNALS = [
   'group-granularity',
   'untested-logic-group',
   'peer-reuse',
-  'group-cycles',
   'group-chain-depth',
 ] as const
 

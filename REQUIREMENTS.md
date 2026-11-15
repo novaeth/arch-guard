@@ -482,7 +482,7 @@
 
 ## 七、后补的需求（按疼度排序）
 
-> **开着的：没有了**（`进行中` 0）—— 全部条目都已定：`已完成` 155 · `已委派` 4 · `不做` 7（R-04 / R-49 / R-50 / R-51 / R-52 / R-53 / R-109）。
+> **开着的：没有了**（`进行中` 0）—— 全部条目都已定：`已完成` 158 · `已委派` 4 · `不做` 7（R-04 / R-49 / R-50 / R-51 / R-52 / R-53 / R-109）。
 > **已撤**：R-30 复杂度 · R-70 抑制注释 · **R-94（analytics 面 kit 化）** —— 编号登记在第八节，不复用（见 N-06 / N-07 / N-13）。
 > 本节是**后补的一批**（含已完成与判不做的），按疼度排序；更早的按主题分散在一~六节。
 
@@ -1244,6 +1244,8 @@ adapters: reactPack.adapters })`（**必须自称实现某个元框架**、必�
 - **期望**：组边图里的环 → 建议"把共用部分下沉到共享层，或让一侧单向依赖"。
   **边界**：只算跨组边 · 忽略测试/生成物 · 单文件环归 S08（不重复报）
 - **验收**：canonical 单向（`billing → crews`）· FSD 全为高层→低层 → 两套样板都 0 条
+- **2026-11-15 升格**：组级环是图属性、零口味，已从建议升为红线 **S47**（R-170）；
+  原 `adviceAllow` 的 `group-cycles` 豁免改用 `exceptions`（`rule: 'S47'`）。
 
 **R-121 建议只能一直喊，没有"已知例外"** · 已完成 · 本体（`adviceAllow` + 可见性）
 
@@ -1790,6 +1792,49 @@ messageProps: ['message', 'description', 'title'] })` —— 这两张表是 **a
   夹具 `__fixtures__/structure-limits`（默认预算必报 × 显式覆盖不报 × 测试不计）；
   单测 `tests/structure-groups-rules.test.mjs`；`docs/DESIGN.md` §5.1、`docs/USAGE.md` §1.1 同步；
   CHANGELOG `[Unreleased]`
+
+**R-170 组级依赖环只提示不阻断** · 已完成 · 本体（建议信号升格为 S47）
+
+- **长这样**：两个切片 / 域互相经公开面引用（FSD 里两个切片互开 `@x`）；文件级没有环，所以 S08 看不见。
+  报告里只有一条"架构建议"—— AI 读到也不会改，它的目标是让门禁通过
+- **会怎样**：组级成环后两边再也拆不开；文件级门禁全绿，退化只能靠人 review（而人不会看）
+- **期望**：把 `group-cycles` 从建议升为 **S47 error（L3）**：组边图里的环逐条报，
+  标 `global` 保证 `--scope=changed` 不丢；合法双向依赖用 `exceptions` 声明（`rule: 'S47'`）。
+  建议层不再重复报同一事实；`ADVICE_SIGNALS` 移除 `group-cycles`（**破坏性**：原 `adviceAllow` 需迁移）
+- **落地**：`src/engine/group-graph.ts`（组索引 / 组边 / 组环共用）· `src/engine/advice-groups.ts`
+  （移除环信号）· `src/packs/core/rules/structure-group-cycles.ts`（S47）· `src/presets/library.ts`；
+  夹具 `__fixtures__/structure-groups`（组级环但文件级无环 × 单向不报）；
+  单测 `tests/structure-groups-rules.test.mjs` / `tests/advice.test.mjs`；
+  `docs/DESIGN.md` §5.1、`docs/USAGE.md`、`PARADIGM.md` §6 同步；CHANGELOG `[Unreleased]`
+
+**R-171 例外 / 建议豁免 0 命中只提示不阻断** · 已完成 · 本体（声明必须有消费者）
+
+- **长这样**：`exceptions: [{ rule: 'S16', glob: 'src/shared/lib/a.ts', reason: '曾经想放宽' }]`，
+  但那个文件早就没有 S16 违规了；报告附录写「未命中（可能可以删掉）」，退出码仍是 0。
+  `adviceAllow` 的 0 命中同样只是一条 notice
+- **会怎样**：AI 只会为通过门禁加例外，不会主动清理失效例外；例外越积越多，最后整份豁免账本没人信 ——
+  这正是 N-02 移除基线机制要防的"隐形门禁关闭"
+- **期望**：`exceptions` / `adviceAllow` 的 **0 命中直接 fail-closed**（抛配置错误，退出码 2），
+  报文点名 `rule` / `signal` × `glob` 与理由；删掉或修到真的命中。`--report-only` 也不放过
+  （配置错误与"代码违规"不是一类）
+- **落地**：`src/engine/declaration-consumers.ts`（0 命中即红，run / advice 共用报文）·
+  `src/engine/run.ts`（exceptions）· `src/engine/advice.ts`（adviceAllow）·
+  `src/engine/report.ts`（去掉"未命中"分支）；单测 `tests/exceptions.test.mjs` / `tests/advice.test.mjs`；
+  `docs/USAGE.md` §5、`PARADIGM.md` §7、`docs/DESIGN.md` §6.6、`CONTEXT.md` 同步；CHANGELOG `[Unreleased]`
+
+**R-172 禁止注释（默认关闭）** · 已完成 · 本体（H14 + `params.noComments`）
+
+- **长这样**：团队要求代码只靠命名与类型表达，AI 却爱写"// 导入 x"这类噪声注释；或者反过来，
+  团队想保留许可证头、但禁止其余注释
+- **会怎样**：注释腐烂没人管；AI 每轮都在加新注释，review 时噪声淹掉真正需要看的说明
+- **期望**：新增 **H14（L2 error）**：TS / JS / CSS（含 SCSS / Less）文件里出现任何注释就报，按文件汇总注释数并指向第一条；
+  **生成物（`structure.generated`）与测试脚手架不判**；**默认关闭**，宿主写 `params: { noComments: true }`
+  才启用（`requires: structure.noComments`，未声明时报告明列停用，不是静默通过）；
+  许可证头这类确实要留的注释用 `exceptions` 声明 H14
+- **落地**：`src/packs/core/rules/hygiene-comments.ts`（H14）· `src/packs/core/index.ts` ·
+  `src/presets/hygiene.ts`（放进名单，能力未声明时停用）；夹具 `__fixtures__/comments`
+  （有注释必报 × 无注释不报）；单测 `tests/hygiene-comments.test.mjs`；
+  `docs/DESIGN.md` §5.5、`docs/USAGE.md` §2 同步；CHANGELOG `[Unreleased]`
 
 ## 八、不做（写在这里是为了不再重复讨论）
 

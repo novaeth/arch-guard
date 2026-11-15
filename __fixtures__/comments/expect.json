@@ -1,0 +1,17 @@
+{
+  "findings": [
+    {
+      "rule": "H14",
+      "file": "src/bad.ts"
+    },
+    {
+      "rule": "H14",
+      "file": "src/legacy.js"
+    },
+    {
+      "rule": "H14",
+      "file": "src/style.css"
+    }
+  ],
+  "exact": true
+}

@@ -136,8 +136,8 @@ superhive 上已按此口径验收：D 域 0 条、C03 0 条，与旧守卫「�
 规则 ID：`S` 结构 / `D` 设计系统 / `C` 文案 / `P` 依赖 / `H` 反退化。
 等级 = 判定等级；级别 = error / warn。
 
-> 本表是**完整设计**（含未实现项）。**已实现并带夹具的 107 条**（以 `arch-guard --stats` / `coreRules` 为准）：
-> `S00–S06`、`S08`、`S09`、`S11–S32`、`S34–S46`、`D01–D10`、`D10b`、`D11–D20`、`D21–D30`、`C01–C07`、`P01–P08`、`P11`、`P12`、`H06–H09`、`H12`、`H13`、`M02–M10`。
+> 本表是**完整设计**（含未实现项）。**已实现并带夹具的 109 条**（以 `arch-guard --stats` / `coreRules` 为准）：
+> `S00–S06`、`S08`、`S09`、`S11–S32`、`S34–S47`、`D01–D10`、`D10b`、`D11–D20`、`D21–D30`、`C01–C07`、`P01–P08`、`P11`、`P12`、`H06–H09`、`H12–H14`、`M02–M10`。
 > 不在本体跑的：`S10`（相对越级，0.4.0 由 S43 取代）按 §4.9 **委派**给 eslint / dependency-cruiser / knip；
 > `H01–H05` 同理（**委派**）；`H10` **没有独立规则** —— 手搓时间格式化的判据在 `data/wheel-fingerprints.ts`
 > 的 `datetime` 指纹里，由 **P06** 消费，**声明 `capabilities.datetime` 才判**（不声明不判：不用日期库的项目用原生 `Intl` 是正当的）。
@@ -196,6 +196,7 @@ superhive 上已按此口径验收：D 域 0 条、C03 0 条，与旧守卫「�
 | S44 | **环境读取只在声明的落点**：`import.meta.env.X` / `process.env.X` 只许出现在声明的配置模块里（`envReads({ apis, in })`）—— 散着读，改名与换环境都要全仓搜，且读到的是无默认值无校验的原始字符串                                                                                                                                                                                                                                                                                                                                                                                                                        | 读取事实 + glob 落点  | L2    | error                                                                                                        |
 | S46 | **埋点上报不许写在渲染体里**：`analytics({ apis })` 里**非 hook** 的上报调用出现在组件渲染体（`functions[].isComponent` 的最内层函数）即报 —— 渲染体每次重渲染都执行，StrictMode 还双调用；D24 只看事件名是不是字面量，看不见调用位置                                                                                                                                                                                                                                                                                                                                                                                  | `calls` + `functions` | L2    | error                                                                                                        |
 | S45 | **导入的成员必须真的被导出**：路径解析得到、名字却不存在（含 default）即报 —— 这类"假绿"最容易发生：TS 编译不过 / 运行时 undefined，而架构门禁此前一路通过。**边界**：`export { default as X } from`（以及 `import { default as X }`）的被导入名是 `default`，按**默认导出**判（目标有 default 即合规，没有才报）—— 这是 barrel 的标准写法，误报会让合法写法被迫写例外                                                                                                                                                                                                                                                 | 导入 + 导出事实       | L1    | error                                                                                                        |
+| S47 | **组级依赖环**：组边图里的环（文件级可能没有环，S08 看不见）—— 组成环后拆 / 换其中一个都要动另一个；与 S27 同口径标 `global`，增量模式默认仍阻断；合法双向依赖用 `exceptions` 声明（R-170，原建议信号 `group-cycles` 升格）                                                                                                                                                                                                                                                                                                                                                                                            | 依赖图                | L3    | error                                                                                                        |
 | S35 | **组必须有片段**：只有公开面入口、没有任何非入口文件的组是空壳（`structure.segmentedGroups` 声明了才判）。**编号说明**：S24 是「契约扫描域不得为空」，本规则排在其后                                                                                                                                                                                                                                                                                                                                                                                                                                                   | 路径 + 角色           | L3    | error                                                                                                        |
 | S36 | **取数只在声明的落点**：`useQuery` / `fetch` 这类取数调用只许出现在 `dataLayer({ fetchIn })` 声明的目录里（页面里直接取数、域里直连后端都报；测试文件豁免）                                                                                                                                                                                                                                                                                                                                                                                                                                                            | 调用 + glob 落点      | L2    | error（声明落点才判）                                                                                        |
 | S37 | **页面必须动态 import**：域入口对 `views/` 的 import 必须是 `lazy: () => import(...)`（静态 import 会让所有页面随主包下载）；`canonical({ lazyViews: true })` 声明才判                                                                                                                                                                                                                                                                                                                                                                                                                                                 | AST import            | L2    | error（声明才判）                                                                                            |
@@ -305,6 +306,7 @@ superhive 上已按此口径验收：D 域 0 条、C03 0 条，与旧守卫「�
 | H10 | 手搓时间格式化（`toLocale*String` / `Intl.DateTimeFormat`）→ 用 dayjs。**没有独立的 H10 规则**：判据在数据表 `data/wheel-fingerprints.ts` 的 `capability: 'datetime'` 里，由 **P06** 消费 —— 项目声明 `deps({ capabilities: { datetime: 'dayjs' } })` 才判（不声明不判：不用日期库的项目用原生 `Intl` 是正当的） | AST          | L2   | warn（经 P06 落地；`toISOString()` 这类机器序列化不判）                                                      |
 | H12 | **退路不留**：文件名里带「旧实现」整段标记（`CrewsPage.old.tsx` / `useCrewsLegacy.ts` / `storage_bak.ts`）—— 留着迟早有人抄错那一份（子串与目录名不算，`src/legacy/**` 是迁移容器）                                                                                                                              | 路径         | L1   | error                                                                                                        |
 | H13 | **生成物必须带 `@generated` 标记**：`structure.generated` 命中的文件必须在注释里带该标记（编辑器 / review 靠它提醒"别手改"）                                                                                                                                                                                     | 注释 + 声明  | L1   | error                                                                                                        |
+| H14 | **禁止注释**（**默认关闭**，R-172）：TS / JS / CSS（含 SCSS / Less）文件里出现任何注释就报；生成物（`structure.generated`）与测试脚手架不判。宿主写 `params: { noComments: true }` 才启用（`requires: structure.noComments`）—— 注释是不是噪声是项目口味，不默认拦                                               | 注释事实     | L2   | error（声明才判）                                                                                            |
 
 ### 5.6 severity 划分原则，以及门禁不做的事
 
@@ -553,7 +555,7 @@ ctx = {
    `rule` 必须存在、`reason` 必填、`expires` 过期即红（`loadConfig` 管形状，`runGuard` 管规则存在性与到期）。
 2. 实现是**对发现项的后置过滤**（不是扫描期整文件跳过）：文件照常有角色、进图、被其它规则判定。
    这与被它取代的文件级 `exempt` 是决定性的区别 —— 后者为了一条规则把整个文件免检。
-3. 每次运行**点名**每条例外（命中 / 未命中），未命中的提示可删；无内联豁免注释（`eslint-disable` 本身是红线 H02）。
+3. 每次运行**点名**每条例外（命中几处）；**0 命中直接报错**（R-171：声明必须有消费者）；无内联豁免注释（`eslint-disable` 本身是红线 H02）。
 
 **违规没有存量豁免**：曾经有过 `arch.baseline.json`（规则 + 文件 + 行文本哈希，只减不增），
 但它同时满足"永久 / 一键重写 / 锚点被格式化干掉"三件事 —— 于是"重新写基线"成了比"修"便宜得多的动作，
@@ -622,7 +624,7 @@ ctx = {
 2. **不许静默降级**：无 git → 明确降级 `full` 并打印；diff 为空 → 打印「无变更文件，仍执行全量谓词」。
 3. **untracked 与 rename 必须正确处理**：untracked 纳入（agent 最常写新文件：`git ls-files --others --exclude-standard`）；rename 按改名处理而非「删+增」（否则改名后的路径与图都对不上）。
 4. **pre-commit 跑 index 内容**：`--staged` 读 `git show :<path>` 的 blob 而非磁盘工作区文件 —— 否则会检查用户还没打算提交的改动，或漏掉已暂存的改动（hook 经典 bug）。
-5. **输出必须自述 scope**：**第一行给结论**（`✖ 1 error · 规则 1/107 · 1 个文件 · 52ms`），
+5. **输出必须自述 scope**：**第一行给结论**（`✖ 1 error · 规则 1/109 · 1 个文件 · 52ms`），
    附录自述范围与元信息（`范围 staged | 全局违规 0 | …`），防「以为全量在跑」。
    _（2026-09-25 UX 调整：结论从最后一行前置到第一行 —— 以前要先翻十行元信息才知道过没过；
    "全量谓词在全项目快照上求值"这类内部术语从主输出移走，见 USAGE §10。）_

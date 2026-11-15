@@ -68,9 +68,11 @@ const append = (dir, rel, text) => write(dir, rel, `${read(dir, rel)}${text}`)
 /**
  * 示例**故意不声明** `metrics.coverage`：M02–M06 要一份「比最近一次提交还新」的覆盖率产物（M06 fail-closed），
  * 而入库的产物必然比它的提交旧 —— 本仓自己的 `arch.config.mjs` 也是因此不声明 coverage。
- * 所以样板"配全"的标准是：**除了这 5 条，其余全在跑**。
+ * 所以样板"配全"的标准是：**除了这 5 条 + H14（默认关闭），其余全在跑**。
  */
 const COVERAGE_SKIPPED = ['M02', 'M03', 'M04', 'M05', 'M06']
+/** 默认关闭的规则（R-172）：H14 要 `params: { noComments: true }` 才跑，样板不声明 */
+const DEFAULT_OFF_SKIPPED = ['H14']
 
 const run = (dir) =>
   runGuard({
@@ -103,26 +105,26 @@ test('示例基线：examples/full 除覆盖率 5 条外全在跑、0 finding、
   )
   assert.deepEqual(
     skippedOf(result),
-    COVERAGE_SKIPPED,
-    '样板里只该剩覆盖率那 5 条（它们要一份比 HEAD 新的产物）—— 其余停用都是"还没配"',
+    [...COVERAGE_SKIPPED, ...DEFAULT_OFF_SKIPPED].sort(),
+    '样板里只该剩覆盖率那 5 条（要一份比 HEAD 新的产物）+ H14（默认关闭）',
   )
   assert.equal(
     createRegistry(coreRules, result.config).enabled.length,
-    coreRules.length - COVERAGE_SKIPPED.length,
+    coreRules.length - COVERAGE_SKIPPED.length - DEFAULT_OFF_SKIPPED.length,
   )
 })
 
-test('示例预算：minimal 的停用条数不许增加，full 只许剩覆盖率那 5 条', async () => {
+test('示例预算：minimal 的停用条数不许增加，full 只许剩覆盖率 5 条 + H14 默认关闭', async () => {
   const minimal = await run(MINIMAL)
   const skipped = skippedOf(minimal)
   assert.deepEqual(minimal.all, [], 'minimal 也该是干净的（它是"最短可用"的答案）')
   assert.ok(
-    skipped.length <= 36,
-    `minimal 的停用从 36 涨到了 ${skipped.length}：${skipped.join(' ')} —— 少配一个面就少一层覆盖`,
+    skipped.length <= 37,
+    `minimal 的停用从 37 涨到了 ${skipped.length}：${skipped.join(' ')} —— 少配一个面就少一层覆盖`,
   )
 
   const full = await run(EXAMPLE)
-  assert.deepEqual(skippedOf(full), COVERAGE_SKIPPED)
+  assert.deepEqual(skippedOf(full), [...COVERAGE_SKIPPED, ...DEFAULT_OFF_SKIPPED].sort())
   assert.ok(
     createRegistry(coreRules, full.config).enabled.length >
       createRegistry(coreRules, minimal.config).enabled.length,
@@ -556,7 +558,10 @@ test('示例基线（FSD）：除明列停用外全在跑、0 finding、没有"�
     result.notices.some((notice) => notice.code === 'declaration-no-match'),
     false,
   )
-  assert.deepEqual(skippedOf(result), ['M02', 'M03', 'M04', 'M05', 'M06', 'S13', 'S37'])
+  assert.deepEqual(
+    skippedOf(result),
+    [...COVERAGE_SKIPPED, ...DEFAULT_OFF_SKIPPED, 'S13', 'S37'].sort(),
+  )
   assert.deepEqual(
     skipCodesOf(result, 'not-enabled'),
     [...APP_ONLY].sort(),

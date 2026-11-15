@@ -291,6 +291,30 @@ test('S27 显式角色预算可以比默认更宽', () => {
   assert.deepEqual(findings, [], '显式预算 5 覆盖默认 2')
 })
 
+test('S47 组级依赖环：A ↔ B 报一次（global），单向不报，测试不计', () => {
+  const records = [
+    record('src/features/a/model/x.ts', { layer: 12, group: 'a', groupName: 'slice' }),
+    record('src/features/b/model/x.ts', { layer: 12, group: 'b', groupName: 'slice' }),
+    record('src/features/a/model/x.test.ts', {
+      layer: 99,
+      role: 'test',
+      group: null,
+      groupName: null,
+    }),
+  ]
+  const both = new Map([
+    ['src/features/a/model/x.ts', new Set(['src/features/b/model/x.ts'])],
+    ['src/features/b/model/x.ts', new Set(['src/features/a/model/x.ts'])],
+  ])
+  const findings = run('S47', context({ records, edges: both }))
+  assert.equal(findings.length, 1, '同一个环只报一次')
+  assert.equal(findings[0].file, 'src/features/a/model/x.ts')
+  assert.match(findings[0].text, /组级依赖环：slice a → slice b → slice a/)
+  assert.equal(findings[0].global, true, '组级谓词标 global（增量模式不丢报）')
+  const oneWay = new Map([['src/features/a/model/x.ts', new Set(['src/features/b/model/x.ts'])]])
+  assert.deepEqual(run('S47', context({ records, edges: oneWay })), [], '单向依赖不是环')
+})
+
 test('S28 外部引用下限：0 个必报、只被 app 引用放过、pages 层整层跳过、同层引用不计', () => {
   const records = [
     record('src/features/dead/index.ts', {

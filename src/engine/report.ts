@@ -36,7 +36,7 @@ export interface ReportInput {
   rulesTotal: number
   /**
    * 规则级例外：声明了什么、各自命中几处。**必须可见** ——
-   * 未命中的也要点名（那说明它已经可以删掉了），否则例外会慢慢积成隐形门禁关闭。
+   * 0 命中在 `run.ts` 里直接报错（R-171：声明必须有消费者），所以到报告这里每条都至少命中 1 处。
    */
   exceptions: ExceptionReport[]
   /** 契约扫描域（空 = 全树） */
@@ -191,7 +191,7 @@ export function renderSummary(input: ReportInput): void {
     for (const entry of input.exceptions) {
       out(
         color.dim(
-          `  · ${entry.rule} × ${entry.glob} —— ${entry.hits > 0 ? `命中 ${entry.hits} 处` : '未命中（可能可以删掉）'}；理由：${entry.reason}${entry.expires ? `；到期 ${entry.expires}` : ''}`,
+          `  · ${entry.rule} × ${entry.glob} —— 命中 ${entry.hits} 处；理由：${entry.reason}${entry.expires ? `；到期 ${entry.expires}` : ''}`,
         ),
       )
     }

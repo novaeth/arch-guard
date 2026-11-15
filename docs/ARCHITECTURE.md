@@ -77,17 +77,19 @@ src/
     coverage.ts      M 域产物解析        git.ts  scope 的 git 事实 + .gitignore 基础层
     portability.ts   P1–P4 自包含自检    self-test.ts  夹具回归
     structure.ts / structure-spec.ts     结构声明（structure as data）的解析与校验
+    group-graph.ts   组索引 / 组边 / 组环（建议层与 S47 共用同一套折叠口径）
+    declaration-consumers.ts   R-171：例外 / 建议豁免的 0 命中即红（run / advice 共用报文）
     output.ts / util.ts / ts-api.ts      输出、工具、TS Compiler API 薄封装
   packs/        源码形态的实现绑定（registry.ts：形态 → 规则集 + 支持的面）+ 共享规则
     core/           共享规则实现（框架无关）
       index.ts        组装 coreRules（今天 tsPack / reactPack 共用同一份）
-      rules/          107 条规则的实现：structure / structure-graph / structure-imports / structure-declared /
-                      structure-directory-limits / structure-groups / structure-locality / structure-routes /
-                      structure-scan /
+      rules/          109 条规则的实现：structure / structure-graph / structure-imports / structure-declared /
+                      structure-directory-limits / structure-groups / structure-group-cycles /
+                      structure-locality / structure-routes / structure-scan /
                       structure-call-sites / structure-util / placement / face-forms /
                       design-tokens / design-vendor / design-styles / design-inline / design-numbers /
                       design-sources / design-shared /
-                      copy / deps / deps-adapters / deps-fingerprints / structure-discipline / hygiene-context / hygiene-retired / metrics
+                      copy / deps / deps-adapters / deps-fingerprints / structure-discipline / hygiene-context / hygiene-retired / hygiene-comments / metrics
     typescript/     tsPack（framework: typescript）——库 / CLI / 纯 TS 项目
     react/          reactPack（framework: react）——React 应用；JSX 专属规则将来的家
   presets/      范式与预设：canonical / library / fsd（范式）+ design-system / copy / deps / hygiene /
@@ -97,7 +99,7 @@ src/
                 solution-alternatives（同类方案）· framework-sources（源码形态扩展名）·
                 face-forms（方案面形态词汇）· css-value-families（CSS 数值三族）· css-syntaxes（样式扩展名 → 解析语法）· retired-names（退路标记）· plural-forms（词形）·
                 icon-packages · build-output-dirs（产物目录兜底跳过名单）
-__fixtures__/   100 个夹具项目：每条规则一对「违规必报 × 合规不报」，全部 exact
+__fixtures__/   101 个夹具项目：每条规则一对「违规必报 × 合规不报」，全部 exact
 examples/minimal/  干净的宿主示例（可搬运性验证）
 arch.config.mjs    门禁自己的配置（库范式 + 依赖选型 + 度量）
 ```

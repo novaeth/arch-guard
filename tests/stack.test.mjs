@@ -65,7 +65,7 @@ test('stack()：一切都由选项传入；落点仍由范式声明（换范式�
   assert.equal(fsdConfig.params.styleDir, 'src/app/styles', 'FSD 自己的落点（全局样式）')
 })
 
-test('stack()：组合出来的规则集 = 各域的并集；能力齐了就不该有停用', async () => {
+test('stack()：组合出来的规则集 = 各域的并集；能力齐了就只剩「默认关闭」的 H14 停用', async () => {
   const config = await load(
     `canonical(), ${stackWith(
       "{ i18n: i18nextKit({ languages: ['zh-CN', 'en'] }), uiKit: antdKit(), deps: { allow: ['react', 'antd'] }, metrics: { coverage: { path: 'coverage/coverage-final.json', format: 'istanbul-json' } } }",
@@ -83,7 +83,8 @@ test('stack()：组合出来的规则集 = 各域的并集；能力齐了就不�
   // （缓存键 · 路由 · 事件名 · 端点 · 键形状）· D27（对比度组合，没人声明 contrastPairs）· D29（没人声明 permissions 面）· D30（没人声明 errorPolicy 面）·
   // S36 / S37 / S38 / S46 **明列停用**（不是静默通过）；
   // 注意 D28（样式入口）**在跑**：`styleDir` 由范式给，只是这个 fixture 里没有 CSS 文件可判。
-  // 另外两条需要更具体的项目声明（M08 tests.requireTestsFor / M09 checkChain / M10 tests.homes）。
+  // 另外两条需要更具体的项目声明（M08 tests.requireTestsFor / M09 checkChain / M10 tests.homes）；
+  // H14「禁止注释」是**默认关闭**（R-172），要 params.noComments 才跑。
   assert.deepEqual(skippedIds(config).sort(), [
     'D02',
     'D18',
@@ -96,6 +97,7 @@ test('stack()：组合出来的规则集 = 各域的并集；能力齐了就不�
     'D27',
     'D29',
     'D30',
+    'H14',
     'M08',
     'M09',
     'M10',

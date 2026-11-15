@@ -195,16 +195,16 @@ test('R-121：豁免按（信号 × 主体）生效，而且**豁免本身要自
   })
   assert.equal(allowed.length, 1)
   assert.match(allowed[0].text, /1 条被 `adviceAllow` 声明豁免/)
-  // 信号对不上 → 不生效（豁免必须指名信号）
-  assert.equal(
-    advise({
-      records,
-      facts: {},
-      edges: {},
-      adviceAllow: [{ signal: 'per-domain-exports', glob: 'domain tiny', reason: 'x' }],
-    }).length,
-    2,
-    '信号对不上时不豁免，并且要报"这条豁免没命中"',
+  // 信号对不上 → 不生效（豁免必须指名信号），而且"声明必须有消费者"（0 命中即红，R-171）
+  assert.throws(
+    () =>
+      advise({
+        records,
+        facts: {},
+        edges: {},
+        adviceAllow: [{ signal: 'per-domain-exports', glob: 'domain tiny', reason: 'x' }],
+      }),
+    /adviceAllow 有 1 条 0 命中（声明必须有消费者）/,
   )
 })
 
@@ -292,36 +292,6 @@ test('R-123 同层组复用：≥3 个同级组引用同一组 → 建议；2 �
   assert.equal(higherUp.filter((item) => item.text.includes('同级或更内层**的组引用')).length, 0)
 })
 
-test('R-124 组级依赖环：A ↔ B 互相依赖 → 建议；单向 → 不建议', () => {
-  const records = [
-    logicGroup('src/features/a/model/x.ts', 'a'),
-    logicGroup('src/features/b/model/x.ts', 'b'),
-  ]
-  const facts = {
-    'src/features/a/model/x.ts': { hasJsx: false, exports: [], imports: [] },
-    'src/features/b/model/x.ts': { hasJsx: false, exports: [], imports: [] },
-  }
-  const oneWay = new Map([['src/features/a/model/x.ts', new Set(['src/features/b/model/x.ts'])]])
-  assert.equal(
-    advise({ records, facts, files: records.map((r) => r.rel), edges: { graph: oneWay } }).filter(
-      (item) => item.text.includes('组级依赖环'),
-    ).length,
-    0,
-  )
-  const both = new Map([
-    ['src/features/a/model/x.ts', new Set(['src/features/b/model/x.ts'])],
-    ['src/features/b/model/x.ts', new Set(['src/features/a/model/x.ts'])],
-  ])
-  const cycle = advise({
-    records,
-    facts,
-    files: records.map((r) => r.rel),
-    edges: { graph: both },
-  }).filter((item) => item.text.includes('组级依赖环'))
-  assert.equal(cycle.length, 1, '同一个环只报一次')
-  assert.match(cycle[0].text, /slice a → slice b → slice a/)
-})
-
 test('R-135 组间依赖链过深：4 组链 → 建议；3 组链 → 不建议（正常纵深）', () => {
   const chain = (names, extra = {}) => {
     const records = names.map((name) => logicGroup(`src/features/${name}/model/x.ts`, name, 12))
@@ -363,7 +333,11 @@ test('R-135 边界：有环时不提深度（环自己更严重）；声明组�
   ])
   const withCycle = advise({ records, facts, files, edges: { graph: cyclic } })
   assert.equal(withCycle.filter((i) => i.text.includes('组间依赖链')).length, 0, '有环不提深度')
-  assert.equal(withCycle.filter((i) => i.text.includes('组级依赖环')).length, 1, '环由环那条报')
+  assert.equal(
+    withCycle.filter((i) => i.text.includes('组级依赖环')).length,
+    0,
+    '组级环已升为 S47（R-170），建议层不再重复报',
+  )
   // 声明了 isolate：跨组依赖本来就由 S22 报 → 跨组类的两条建议都不提
   const chain = new Map([
     ['src/features/a/model/x.ts', new Set(['src/features/b/model/x.ts'])],

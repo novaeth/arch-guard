@@ -15,6 +15,7 @@ import {
   pushScanNotices,
 } from './notices.js'
 import { pushAdviceNotices } from './advice.js'
+import { exceptionsWithHits } from './declaration-consumers.js'
 import { collectI18n } from './i18n.js'
 import { err, json, out } from './output.js'
 import { createRegistry } from './registry.js'
@@ -26,7 +27,6 @@ import {
   renderSummary,
   severityOf,
   toJsonReport,
-  type ExceptionReport,
   type ReportInput,
 } from './report.js'
 import { scanProject } from './scan.js'
@@ -349,10 +349,8 @@ export async function runGuard(options: RunOptions): Promise<RunResult> {
     }
     all.splice(0, all.length, ...kept)
   }
-  const exceptions: ExceptionReport[] = config.exceptions.map((entry, index) => ({
-    ...entry,
-    hits: exceptionHits[index] ?? 0,
-  }))
+  // R-171：例外 0 命中是配置腐烂，与"过期即红"同一纪律
+  const exceptions = exceptionsWithHits(config.exceptions, exceptionHits)
 
   /* ---- 违规**没有**存量豁免：全量违规直接进报告，active 就是全部 ---- */
   let active: Finding[] = all

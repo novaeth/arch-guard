@@ -1,3 +1,4 @@
+import { assertAdviceAllowConsumed } from './declaration-consumers.js'
 import { TEST_LAYER_MIN } from './defaults.js'
 import { resolveSpecifier, type Graph } from './graph.js'
 import { globToRegExp } from './util.js'
@@ -42,12 +43,14 @@ interface PerDomainExport {
  */
 export function pushAdviceNotices(input: AdviceInput, notices: Diagnostic[]): void {
   const { config, records } = input
-  if (records.length === 0) return
-  const candidates: Advice[] = [
-    ...perDomainExportAdvice(input),
-    ...groupGranularityAdvice(records),
-    ...groupLevelAdvice(input),
-  ]
+  const candidates: Advice[] =
+    records.length === 0
+      ? []
+      : [
+          ...perDomainExportAdvice(input),
+          ...groupGranularityAdvice(records),
+          ...groupLevelAdvice(input),
+        ]
   const allow = config.adviceAllow ?? []
   const used = new Set<number>()
   let suppressed = 0
@@ -72,14 +75,11 @@ export function pushAdviceNotices(input: AdviceInput, notices: Diagnostic[]): vo
     })
   }
   const unused = allow.filter((_, index) => !used.has(index))
-  if (unused.length > 0) {
-    notices.push({
-      code: 'architecture-advice',
-      text:
-        `adviceAllow 里有 ${unused.length} 条没命中任何建议（可能可以删掉）：` +
-        unused.map((entry) => `${entry.signal} × ${entry.glob}`).join(' · '),
-    })
-  }
+  /**
+   * **声明必须有消费者**（R-171）：0 命中不是"提示"，而是配置腐烂 ——
+   * 本工具面向 AI，非阻断的"可能可以删掉"不会有人处理；留着只会变成隐形的门禁关闭。
+   */
+  assertAdviceAllowConsumed(unused)
 }
 
 /**

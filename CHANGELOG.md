@@ -113,6 +113,39 @@
 - 本仓 `lib:engine` 60 / `lib:presets` 40（都是层模块家，不是例外）；夹具
   `__fixtures__/structure-limits` 补默认预算必报 × 显式覆盖不报 × 测试不计。见 R-169、DESIGN §5.1。
 
+### Added（R-170：S47 组级依赖环 —— 建议信号升格）
+
+> **行为变更 / 破坏性（配置面）**：新增规则 S47；`ADVICE_SIGNALS` 移除 `group-cycles`。
+> `adviceAllow: [{ signal: 'group-cycles', … }]` 现在会在配置加载时报「不认识的信号」。
+> 迁移：改成 `exceptions: [{ rule: 'S47', glob, reason }]`。报告格式 / 退出码 / `apiVersion` 不变。
+
+- 组边图里的环从建议升为 error：文件级可能没有环（S08 看不见），组级成环后两边再也拆不开。
+- 与 S27 同口径标 `global`：`--scope=changed` 默认仍阻断；合法双向依赖用 `exceptions` 声明。
+- 组索引 / 组边 / 组环抽到 `src/engine/group-graph.ts`，建议层与 S47 共用同一套折叠口径。
+- 夹具 `__fixtures__/structure-groups` 补「组级环但文件级无环」；单测同步。见 R-170、DESIGN §5.1。
+
+### Changed（R-171：例外 / 建议豁免 0 命中即红）
+
+> **行为变更 / 破坏性（配置面）**：`exceptions` 或 `adviceAllow` 里 0 命中的条目现在直接抛配置错误
+> （退出码 2），不再只是报告附录里的"可能可以删掉"。`apiVersion` / `NOTICE_CODES` / 报告格式不变。
+> 迁移：删掉失效条目，或把 `glob` / `signal` 修到真的命中。
+
+- `exceptions` 0 命中：`runGuard` 在例外过滤后检查命中数，0 → throw（点名 `rule` × `glob` 与 `reason`）。
+- `adviceAllow` 0 命中：`pushAdviceNotices` 不再推 notice，改为 throw（点名 `signal` × `glob` 与 `reason`）。
+- 两者共用 `src/engine/declaration-consumers.ts` 的同一份报文口径。
+- 报告里的「未命中（可能可以删掉）」分支移除（0 命中已到不了报告）。
+- 单测 `tests/exceptions.test.mjs` / `tests/advice.test.mjs` 同步。见 R-171、DESIGN §6.6、USAGE §5。
+
+### Added（R-172：H14 禁止注释 —— 默认关闭）
+
+> **行为变更**：新增 H14，但**默认不跑**（`requires: structure.noComments`），现有项目不受影响。
+> 开启：`hygiene()` + `overrides.params: { noComments: true }`。
+
+- H14（L2 error）：TS / JS / CSS（含 SCSS / Less）文件里出现任何注释就报，按文件汇总注释数并指向第一条；生成物与测试脚手架不计。
+- `params.noComments` 是能力门：没声明时报告明列「能力未声明：structure.noComments」，不是静默通过。
+- 确实要保留的注释（许可证头）用 `exceptions` 声明 H14。夹具 `__fixtures__/comments`；
+  单测 `tests/hygiene-comments.test.mjs`。见 R-172、DESIGN §5.5。
+
 ### Added（R-154：自定义 capability —— 宿主可以登记本体没有的能力）
 
 - `deps({ capabilities })` 的值除字符串（`{ datetime: 'dayjs' }`）外，新增**对象形态**：

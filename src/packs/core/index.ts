@@ -5,6 +5,7 @@ import { adapterRules } from './rules/deps-adapters.js'
 import { depsRules } from './rules/deps.js'
 import { contextHygieneRules } from './rules/hygiene-context.js'
 import { generatedMarker } from './rules/hygiene-generated.js'
+import { noComments } from './rules/hygiene-comments.js'
 import { hygieneRetiredRules } from './rules/hygiene-retired.js'
 import { designSourceRules } from './rules/design-sources.js'
 import { inlineStyleDiscipline } from './rules/design-inline.js'
@@ -18,6 +19,7 @@ import { structureGraphRules } from './rules/structure-graph.js'
 import { structureImportRules } from './rules/structure-imports.js'
 import { structureGroupRules } from './rules/structure-groups.js'
 import { directoryItemLimits } from './rules/structure-directory-limits.js'
+import { groupCycleRule } from './rules/structure-group-cycles.js'
 import { structureBoundaryRules } from './rules/structure-boundaries.js'
 import { structureCallSiteRules } from './rules/structure-call-sites.js'
 import { structureDisciplineRules } from './rules/structure-discipline.js'
@@ -46,6 +48,7 @@ export const coreRules: Rule[] = [
   ...declaredStructureRules,
   ...structureGroupRules,
   directoryItemLimits,
+  groupCycleRule,
   ...structureLocalityRules,
   ...structureCallSiteRules,
   ...structureBoundaryRules,
@@ -68,4 +71,5 @@ export const coreRules: Rule[] = [
   ...contextHygieneRules,
   ...hygieneRetiredRules,
   generatedMarker,
+  noComments,
 ]

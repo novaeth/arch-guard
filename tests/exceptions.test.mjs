@@ -75,7 +75,7 @@ test('规则级例外只摘掉指名的那条规则 —— 文件本身照常被
   }
 })
 
-test('例外未命中也要点名（否则会慢慢积成隐形门禁关闭）', async () => {
+test('例外 0 命中即红（声明必须有消费者）', async () => {
   const dir = makeProject({
     rule: 'S16',
     glob: 'src/shared/lib/a.ts',
@@ -83,7 +83,9 @@ test('例外未命中也要点名（否则会慢慢积成隐形门禁关闭）',
   })
   try {
     const result = await runCli([], dir)
-    assert.match(result.out, /· S16 × src\/shared\/lib\/a\.ts —— 未命中（可能可以删掉）/)
+    assert.equal(result.code, 2)
+    assert.match(result.out + result.err, /exceptions 有 1 条 0 命中（声明必须有消费者）/)
+    assert.match(result.out + result.err, /S16 × src\/shared\/lib\/a\.ts/)
   } finally {
     rmSync(dir, { recursive: true, force: true })
   }
