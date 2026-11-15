@@ -3,6 +3,7 @@ import { maskTs } from './mask.js'
 import { packageNameOf } from '../../../engine/graph.js'
 
 import { effectiveFingerprints } from './deps-fingerprints.js'
+import { fileUsesPreferred, lineAt, lineMatchesAny, lineStartsOf } from './fingerprint-scan.js'
 import type { Finding, Rule, RuleContext } from '../../../engine/types.js'
 import { finding } from './finding.js'
 
@@ -164,36 +165,39 @@ export const depsUnused: Rule = {
   },
 }
 
-interface FingerprintHit {
-  file: string
-  line: number
+interface ActiveFingerprint {
+  capability: string
+  preferred: string
+  entry: WheelFingerprint
+  regexes: RegExp[]
+  /** 已在用首选方案的证据（命中行 / 下一行）；空数组 = 不做同行豁免 */
+  exempt: RegExp[]
 }
 
-/** import 语句里的包名（@scope/x、x/sub 归一化到包） */
-/** 把注释区间替换成空格（保留换行）：只在真实代码上匹配指纹 */
-
-/** 全项目扫强指纹（数据来自 data/wheel-fingerprints.ts，规则本身不含任何库名） */
-function scanStrongFingerprints(
-  ctx: Parameters<Rule['run']>[0],
+/** 生效表里**这次真的要扫**的条目：声明了能力 + 该条目有强指纹 */
+function activeFingerprints(
   fingerprints: readonly WheelFingerprint[],
-  capability: string,
-): FingerprintHit[] {
-  const entry = fingerprints.find((item) => item.capability === capability)
-  if (!entry?.syntax || entry.syntax.length === 0) return []
-  const regexes = entry.syntax.map((pattern) => new RegExp(pattern))
-  const hits: FingerprintHit[] = []
-  for (const record of ctx.records) {
-    if (record.kind !== 'ts' && record.kind !== 'css') continue
-    const raw = ctx.sourceOf(record.rel)
-    if (!raw) continue
-    const lines = maskTs(raw, ctx.facts.get(record.rel)).split('\n')
-    for (let index = 0; index < lines.length; index += 1) {
-      const line = lines[index] as string
-      if (regexes.some((regex) => regex.test(line)))
-        hits.push({ file: record.rel, line: index + 1 })
-    }
+  capabilities: Record<string, string>,
+): ActiveFingerprint[] {
+  const out: ActiveFingerprint[] = []
+  for (const [capability, preferred] of Object.entries(capabilities)) {
+    const entry = fingerprints.find((item) => item.capability === capability)
+    if (!entry?.syntax || entry.syntax.length === 0) continue
+    out.push({
+      capability,
+      preferred,
+      entry,
+      // `gm`：整份匹配，但 `^` / `$` 仍是行锚点 —— 宿主自定义 pattern 的逐行语义不变
+      regexes: entry.syntax.map((pattern) => new RegExp(pattern, 'gm')),
+      exempt: (entry.exemptSyntax ?? []).map((pattern) => new RegExp(pattern)),
+    })
   }
-  return hits
+  return out
+}
+
+interface FileHits {
+  line: number
+  count: number
 }
 
 /**
@@ -202,9 +206,11 @@ function scanStrongFingerprints(
  * 两种能力的豁免方式不同（这里曾经写反，导致 5 个平台能力静默失效）：
  * - **需要依赖的能力**（dayjs / commander / zod…）：看**这个文件**有没有 import 首选方案 ——
  *   按文件判而非按项目判，否则"部分迁移"（A 文件用了、B 文件还在手搓）会被整体放过；
- * - **平台内置能力**（structuredClone / Intl / crypto.randomUUID / URLSearchParams…）：**没有依赖可查，
- *   所以没有豁免** —— 命中就报。别以为"同文件里也用了 structuredClone 就没事"：JSON 深拷贝会丢
- *   Date / Map / undefined，那仍然是个 bug。
+ * - **平台内置能力**（structuredClone / Intl / crypto.randomUUID / URLSearchParams…）：**没有依赖可查**，
+ *   但数据表的 `exemptSyntax` 命中行 / 下一行时是直接证据 —— 那是推荐写法（`'?' + new URLSearchParams(…)`），
+ *   不再误报（R-165）。除此之外命中即报：同文件另一处用了 structuredClone 管不了这一处的 JSON 深拷贝。
+ *
+ * 指纹按**整份遮罩后的文件**匹配（`gm`）：跨行调用是格式化工具的默认输出，逐行扫描会整片漏判。
  *
  * `allowOwn: true` 的能力（query-string / validation / debounce-throttle）**降级为 warn**：
  * 有些小工具自研是合理的，但"提示"要真的出现在报告里，而不是只往 hint 追加一句话。
@@ -219,44 +225,73 @@ export const capabilityPreferred: Rule = {
   title: '能力必须用登记方案',
   hint: '用能力表里登记的首选方案，别手搓',
   run: (ctx) => {
+    const active = activeFingerprints(effectiveFingerprints(ctx.policy), ctx.policy.capabilities)
+    if (active.length === 0) return []
     const out: Finding[] = []
-    // 生效的指纹表 = 内置表 + 本项目覆盖（R-73）；每个能力都查同一份，别再各找一遍
-    const fingerprints = effectiveFingerprints(ctx.policy)
-    for (const [capability, preferred] of Object.entries(ctx.policy.capabilities)) {
-      const entry = fingerprints.find((item) => item.capability === capability)
-      if (!entry) continue
-      const hits = scanStrongFingerprints(ctx, fingerprints, capability)
-      if (hits.length === 0) continue
-      // 按**文件**判定：这个文件自己有没有在用登记方案。
-      // 用全项目判定会放过「部分迁移」（A 文件用了 dayjs、B 文件还在手搓）。
-      const fileUsesPreferred = (file: string): boolean => {
-        // 平台内置能力没有 import 可查 → **没有豁免**（返回 false 表示"不算已在用"）。
-        // 这里曾经返回 true（语义写反），于是 deep-clone / unique-id / number-format /
-        // deep-equal / query-string 五个平台能力**从来没报过**，而没有任何夹具覆盖它们。
-        if (entry.platform === true) return false
-        const facts = ctx.facts.get(file)
-        return facts?.imports.some((item) => packageNameOf(item.spec) === preferred) === true
+    // capability → file → { 首个命中行, 命中数 }
+    const hits = new Map<string, Map<string, FileHits>>()
+    for (const record of ctx.records) {
+      // 只扫脚本文件：指纹全是 JS/TS 形态；CSS/SCSS 没有 facts（兜底遮罩也认不出 `//` 注释），
+      // 扫它只会把样式注释里的示例当成代码（R-167）。
+      if (record.kind !== 'ts') continue
+      const raw = ctx.sourceOf(record.rel)
+      if (!raw) continue
+      const masked = maskTs(raw, ctx.facts.get(record.rel))
+      const starts = lineStartsOf(masked)
+      for (const activeEntry of active) {
+        for (const regex of activeEntry.regexes) {
+          regex.lastIndex = 0
+          let match: RegExpExecArray | null
+          while ((match = regex.exec(masked)) !== null) {
+            // 空匹配保护：`/x*/g` 会在同一位置反复命中
+            if (match[0] === '') {
+              regex.lastIndex += 1
+              continue
+            }
+            const line = lineAt(starts, match.index)
+            // 命中行 / 下一行已经在用首选方案（数据表的 exemptSyntax，如 URLSearchParams）→ 推荐写法，不报
+            if (lineMatchesAny(masked, starts, line, activeEntry.exempt)) continue
+            let byFile = hits.get(activeEntry.capability)
+            if (!byFile) {
+              byFile = new Map()
+              hits.set(activeEntry.capability, byFile)
+            }
+            const current = byFile.get(record.rel)
+            if (current) {
+              current.count += 1
+              // 报告取**全文最早**命中：pattern 的枚举顺序不该决定行号（R-166）
+              current.line = Math.min(current.line, line)
+            } else {
+              byFile.set(record.rel, { line, count: 1 })
+            }
+          }
+        }
       }
-      // 每文件只报首个命中行，但把该文件其余命中数带上（否则会以为只有一处）
-      const firstHitPerFile = new Map<string, FingerprintHit>()
-      for (const hit of hits) if (!firstHitPerFile.has(hit.file)) firstHitPerFile.set(hit.file, hit)
-      const hitCountByFile = new Map<string, number>()
-      for (const hit of hits) hitCountByFile.set(hit.file, (hitCountByFile.get(hit.file) ?? 0) + 1)
+    }
 
-      for (const [file, hit] of firstHitPerFile) {
-        if (fileUsesPreferred(file)) continue
-        const others = (hitCountByFile.get(file) ?? 1) - 1
+    for (const activeEntry of active) {
+      const byFile = hits.get(activeEntry.capability)
+      if (!byFile) continue
+      for (const [file, hit] of byFile) {
+        // 按**文件**判定：这个文件自己有没有在用登记方案。
+        // 用全项目判定会放过「部分迁移」（A 文件用了 dayjs、B 文件还在手搓）。
+        if (
+          fileUsesPreferred(ctx.facts.get(file), activeEntry.preferred, activeEntry.entry.platform)
+        ) {
+          continue
+        }
+        const others = hit.count - 1
         const findingEntry = finding(
           'P06',
           file,
-          hit,
-          `手搓了 ${capability} 的活，但没在用登记的 ${preferred}${others > 0 ? `（该文件另有 ${others} 处）` : ''}`,
-          entry.hint,
+          hit.line,
+          `手搓了 ${activeEntry.capability} 的活，但没在用登记的 ${activeEntry.preferred}${others > 0 ? `（该文件另有 ${others} 处）` : ''}`,
+          activeEntry.entry.hint,
         )
-        if (entry.allowOwn === true) {
+        if (activeEntry.entry.allowOwn === true) {
           // 数据表说"只提示不报错" → 真的降级（此前只改 hint，finding 仍是 error）
           findingEntry.severity = 'warn'
-          findingEntry.hint = `${entry.hint}（该能力允许自研，仅提示）`
+          findingEntry.hint = `${activeEntry.entry.hint}（该能力允许自研，仅提示）`
         }
         out.push(findingEntry)
       }

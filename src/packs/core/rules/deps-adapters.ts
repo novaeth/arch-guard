@@ -3,6 +3,7 @@ import { maskTs } from './mask.js'
 import { packageNameOf } from '../../../engine/graph.js'
 import type { Adapter } from '../../../engine/types.js'
 import { effectiveFingerprints } from './deps-fingerprints.js'
+import { fileUsesPreferred, lineAt, lineStartsOf } from './fingerprint-scan.js'
 import { createRule } from '../../../engine/rule.js'
 import { cssFiles, usesVendorPatterns, vendorPatterns } from './design-shared.js'
 import { knownIconPackages } from '../../../data/icon-packages.js'
@@ -124,13 +125,18 @@ export const iconSourceSingle: Rule = createRule({
   },
 })
 
-/** 把注释区间遮罩成空格（保留换行）：弱指纹只认代码，注释里写到的轮子不算 */
-
-/** 命名指纹：导出名 / 函数名与库 API 名重合（default / * 不算） */
+/**
+ * 命名指纹：导出名 / 函数名与库 API 名重合（default / * 不算）。
+ *
+ * **纯再导出不算**（R-165）：`export { formatDate } from 'date-fns'` 是在复用成熟实现，
+ * 不是"自己写了一个 formatDate"；把它算进来会让 barrel 文件被误报成自造轮子。
+ */
 function namingHit(facts: Facts, apiNames: string[]): { name: string; line: number } | null {
   const wanted = new Set(apiNames.map((name) => name.toLowerCase()))
   const candidates = [
-    ...facts.exports.map((entry) => ({ name: entry.name, line: entry.line })),
+    ...facts.exports
+      .filter((entry) => entry.kind !== 're-export')
+      .map((entry) => ({ name: entry.name, line: entry.line })),
     ...facts.functions.map((entry) => ({ name: entry.name, line: entry.line })),
   ]
   for (const candidate of candidates) {
@@ -140,39 +146,80 @@ function namingHit(facts: Facts, apiNames: string[]): { name: string; line: numb
   return null
 }
 
+/** 弱指纹的第一处命中行（0 = 没有）：整份匹配，跨行写法照抓；零长匹配不算证据 */
+function firstWeakLine(
+  regexes: readonly RegExp[],
+  masked: string,
+  starts: readonly number[],
+): number {
+  let first = 0
+  for (const regex of regexes) {
+    regex.lastIndex = 0
+    let match: RegExpExecArray | null
+    while ((match = regex.exec(masked)) !== null) {
+      if (match[0] === '') {
+        regex.lastIndex += 1
+        continue
+      }
+      const line = lineAt(starts, match.index)
+      if (first === 0 || line < first) first = line
+      break
+    }
+  }
+  return first
+}
+
 /**
  * P07 疑似自造轮子：同一能力同时命中「弱语法指纹」与「命名指纹」才报（warn）。
  * 单条弱证据不报 —— 正常业务里的 setTimeout 防抖 UI 不该被误伤（见 .scratch/wheel-detection/spec.md）。
+ *
+ * **两种不报**（R-165）：
+ * - 文件已经 import 首选方案 → 那是**统一封装**（`formatDate = (x) => dayjs(x).format(…)`），与 P06 同一豁免；
+ * - 命名证据来自**纯再导出** → 在复用成熟实现，不是自研。
  */
 export const wheelSuspected: Rule = createRule({
   id: 'P07',
   domain: 'deps',
   level: 'L2',
   severity: 'warn',
+  // 与 P06 同口径：测试脚手架会为了实现夹具而写 `deepEqual` / `debounce`，不是产品代码纪律的对象
+  appliesTo: 'product',
   title: '疑似自造轮子',
   hint: '自研模块与成熟库 API 同名，且文件里已经出现该能力的弱语法指纹：优先用登记方案，别自己实现一遍',
   run: (ctx) => {
+    // 与 P06 同口径：只判**已声明**的能力（没登记 = 没批准）。以前遍历整张生效表，
+    // 于是 `capabilities: {}` 也会对自研 deepEqual 提示 —— 提示的却是项目没选过的方案（R-166）。
+    const fingerprints = effectiveFingerprints(ctx.policy)
+    const active = Object.entries(ctx.policy.capabilities).flatMap(([capability, preferred]) => {
+      const entry = fingerprints.find((item) => item.capability === capability)
+      if (!entry) return []
+      const softSyntax = entry.softSyntax ?? []
+      const apiNames = entry.apiNames ?? []
+      // 两类证据缺一不可：没有弱指纹的能力不参与 P07
+      if (softSyntax.length === 0 || apiNames.length === 0) return []
+      return [
+        {
+          entry,
+          preferred,
+          apiNames,
+          regexes: softSyntax.map((pattern) => new RegExp(pattern, 'gm')),
+        },
+      ]
+    })
+    if (active.length === 0) return []
+
     const out: Finding[] = []
     for (const record of ctx.records) {
       const facts = ctx.facts.get(record.rel)
       const source = ctx.sourceOf(record.rel)
       if (!facts || !source) continue
-      const lines = maskTs(source, facts).split('\n')
-
-      for (const entry of effectiveFingerprints(ctx.policy)) {
-        const softSyntax = entry.softSyntax ?? []
-        const apiNames = entry.apiNames ?? []
-        // 两类证据缺一不可：没有弱指纹的能力（如 deep-clone）不参与 P07
-        if (softSyntax.length === 0 || apiNames.length === 0) continue
-
-        const regexes = softSyntax.map((pattern) => new RegExp(pattern))
-        let weakLine = 0
-        for (const [index, line] of lines.entries()) {
-          if (regexes.some((regex) => regex.test(line))) {
-            weakLine = index + 1
-            break
-          }
-        }
+      const masked = maskTs(source, facts)
+      const starts = lineStartsOf(masked)
+      for (const { entry, preferred, apiNames, regexes } of active) {
+        // 已经 import 首选方案的文件是统一封装，不是自造轮子（platform 能力没有 import 可查 → 不豁免）。
+        // 这里用**宿主声明的** preferred：声明 date-fns 就该认 date-fns，不能拿内置的 dayjs 判（R-166）。
+        if (fileUsesPreferred(facts, preferred, entry.platform)) continue
+        const weakLine = firstWeakLine(regexes, masked, starts)
         if (weakLine === 0) continue
 
         const naming = namingHit(facts, apiNames)

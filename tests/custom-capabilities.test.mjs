@@ -80,6 +80,9 @@ test('配置期校验：重名 / 无证据 / 坏正则 / 缺 hint / 命名证据
     [{ x: { preferred: 'p', syntax: ['x'] } }, /缺 hint/],
     [{ x: { preferred: 'p', apiNames: ['foo'], hint: 'h' } }, /apiNames 没有 softSyntax/],
     [{ x: { preferred: 'p', softSyntax: ['setTimeout\\('], hint: 'h' } }, /只有 softSyntax/],
+    // R-165：字符串形态的能力名必须能落到生效表上（拼错 = 静默零覆盖，必须当场报错）
+    [{ datetme: 'dayjs' }, /没有内置指纹/],
+    [{ x: { preferred: 'p', syntax: ['x'], exemptSyntax: ['('], hint: 'h' } }, /不是合法正则/],
   ]
   for (const [capabilities, pattern] of cases) {
     assert.throws(() => deps({ capabilities }), pattern)
@@ -203,4 +206,73 @@ test('冲突检测：自定义平台能力不算依赖；需要依赖的自定�
     capabilities: { 'http-client': HTTP_CLIENT },
   })
   assert.match(policyConflicts(dependency)[0] ?? '', /不在 allow/)
+})
+
+test('R-166：P07 只判已声明能力；import 豁免用宿主声明的首选', () => {
+  const source = {
+    'src/shared/lib/bus.ts':
+      'export function emit(type) {\n  window.addEventListener(type, () => {})\n}\n',
+  }
+  const undeclared = rule('P07').run(
+    ctx({
+      policy: depsPolicyFrom({}),
+      sources: source,
+      exports: { 'src/shared/lib/bus.ts': [{ name: 'emit', line: 1 }] },
+    }),
+  )
+  assert.deepEqual(undeclared, [], '能力没声明 → P07 不该提示（与 P06 同口径）')
+
+  // 宿主声明 datetime → date-fns：文件 import date-fns 就该豁免，不能拿内置 dayjs 判
+  const hostPreferred = depsPolicyFrom({ capabilities: { datetime: 'date-fns' } })
+  const dateFile = {
+    'src/shared/lib/dates.ts':
+      "import { format } from 'date-fns'\nexport function isSameDay(a: Date, b: Date): boolean {\n  return a.getTime() === b.getTime()\n}\n",
+  }
+  assert.deepEqual(
+    rule('P07').run(
+      ctx({
+        policy: hostPreferred,
+        sources: dateFile,
+        imports: { 'src/shared/lib/dates.ts': [{ spec: 'date-fns', typeOnly: false }] },
+        exports: { 'src/shared/lib/dates.ts': [{ name: 'isSameDay', line: 2 }] },
+      }),
+    ),
+    [],
+    '已 import 宿主声明的 date-fns → 不再按内置 dayjs 报 P07',
+  )
+})
+
+test('R-166：depsPolicyFrom 与 deps() 共用 fingerprints 校验（未知能力 / 坏正则 / 零长 / 形状）', () => {
+  const cases = [
+    [{ capability: 'nope' }, /不存在的能力/],
+    [{ capability: 'datetime', addSyntax: ['('] }, /不是合法正则/],
+    [{ capability: 'datetime', addSoftSyntax: ['x?'] }, /零长命中/],
+    [{ capability: 'datetime', apiNames: 'abc' }, /字符串数组/],
+    [{ capability: 'datetime', allowOwn: 'yes' }, /布尔值/],
+  ]
+  for (const [override, pattern] of cases) {
+    assert.throws(() => depsPolicyFrom({ fingerprints: [override] }), pattern)
+    assert.throws(() => deps({ fingerprints: [override] }), pattern)
+  }
+  assert.throws(() => depsPolicyFrom({ fingerprints: {} }), /必须是数组/)
+})
+
+test('R-166：policyConflicts 认 fingerprints[].platform（true 并入 / false 剔除）', () => {
+  const platformOverride = depsPolicyFrom({
+    allow: ['commander'],
+    capabilities: { 'debounce-throttle': 'lodash-es' },
+    fingerprints: [{ capability: 'debounce-throttle', platform: true }],
+  })
+  assert.deepEqual(policyConflicts(platformOverride), [], 'platform 覆盖后不再要求进 allow')
+
+  const backToDependency = depsPolicyFrom({
+    allow: ['commander'],
+    capabilities: { 'debounce-throttle': 'lodash-es' },
+    fingerprints: [{ capability: 'debounce-throttle', platform: false }],
+  })
+  assert.match(
+    policyConflicts(backToDependency, ['debounce-throttle'])[0] ?? '',
+    /不在 allow/,
+    'platform:false 覆盖要把它从平台集合里剔除',
+  )
 })

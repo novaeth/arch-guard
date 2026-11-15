@@ -109,12 +109,21 @@ test('portability：P1 非白名单依赖 / P2 宿主字面量 / P3 引擎布局
 /* ---------------- 依赖策略 ---------------- */
 
 test('deps：策略解析忽略非法值、冲突检测覆盖 deny 与 allow', () => {
-  const policy = depsPolicyFrom({ allow: ['a', 1], deny: 'x', capabilities: { k: 'v', bad: 2 } })
+  const policy = depsPolicyFrom({
+    allow: ['a', 1],
+    deny: 'x',
+    capabilities: { 'deep-clone': 'structuredClone', bad: 2 },
+  })
   assert.deepEqual(policy.allow, ['a'])
   assert.deepEqual(policy.deny, [])
-  assert.deepEqual(policy.capabilities, { k: 'v' })
+  assert.deepEqual(policy.capabilities, { 'deep-clone': 'structuredClone' })
   assert.match(
-    policyConflicts(depsPolicyFrom({ deny: ['v'], capabilities: { k: 'v' } }))[0] ?? '',
+    policyConflicts(
+      depsPolicyFrom({
+        deny: ['structuredClone'],
+        capabilities: { 'deep-clone': 'structuredClone' },
+      }),
+    )[0] ?? '',
     /deny/,
   )
 })

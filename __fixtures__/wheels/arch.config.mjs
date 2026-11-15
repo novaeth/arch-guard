@@ -8,11 +8,14 @@ export default {
     deps({
       capabilities: {
         'cli-args': 'commander',
+        datetime: 'dayjs',
         'deep-clone': 'structuredClone',
         'unique-id': 'crypto.randomUUID',
         'number-format': 'Intl.NumberFormat',
         'deep-equal': 'node:util.isDeepStrictEqual',
         'query-string': 'URLSearchParams',
+        'word-forms': 'pluralize',
+        validation: 'zod',
       },
     }),
   ],

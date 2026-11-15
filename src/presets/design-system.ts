@@ -1,10 +1,10 @@
-import { capabilityOf, wheelFingerprints } from '../data/wheel-fingerprints.js'
 import { AdapterError } from '../engine/adapters.js'
+import { parseCapabilities, type CapabilityDeclaration } from '../engine/deps.js'
 import {
-  parseCapabilities,
-  type CapabilityDeclaration,
+  parseFingerprintOverrides,
+  validateFingerprintOverrides,
   type FingerprintOverride,
-} from '../engine/deps.js'
+} from '../engine/fingerprint-overrides.js'
 import type { Preset } from '../engine/types.js'
 
 export interface ContrastPair {
@@ -292,41 +292,18 @@ export interface DepsOptions {
 
 export function deps(options: DepsOptions = {}): Preset {
   // 校验放在这里（宿主写配置的地方）而不是规则里：
-  // 能力名拼错、证据缺失、pattern 写不成正则 —— 都是"配了但不生效"，必须当场报错
+  // 能力名拼错、证据缺失、pattern 写不成正则 —— 都是"配了但不生效"，必须当场报错。
+  // 与 `depsPolicyFrom()` 共用同一份解析/校验（R-166）：两条路不会一个报、一个静默。
   const parsed = parseCapabilities(options.capabilities ?? {})
-  if (parsed.problems.length > 0) {
-    throw new AdapterError(
-      `deps() 的 capabilities 配置有误：\n  - ${parsed.problems.join('\n  - ')}`,
-    )
-  }
-  const customNames = new Set(parsed.customCapabilities.map((entry) => entry.capability))
-  for (const override of options.fingerprints ?? []) {
-    const entry = capabilityOf(override.capability)
-    if (!entry && !customNames.has(override.capability)) {
-      const known = [...wheelFingerprints.map((item) => item.capability), ...customNames].join(
-        ' / ',
-      )
-      throw new AdapterError(
-        `deps() 的指纹覆盖指向不存在的能力「${override.capability}」\n` +
-          `（内置能力与本次声明的自定义能力：${known}）`,
-      )
-    }
-    for (const field of [
-      'addSyntax',
-      'removeSyntax',
-      'addSoftSyntax',
-      'removeSoftSyntax',
-    ] as const) {
-      for (const pattern of override[field] ?? []) {
-        try {
-          new RegExp(pattern)
-        } catch {
-          throw new AdapterError(
-            `deps() 的指纹覆盖 ${field} 里「${pattern}」不是合法正则 —— 这条覆盖永远不会命中`,
-          )
-        }
-      }
-    }
+  const fingerprints = parseFingerprintOverrides(options.fingerprints)
+  const customNames = parsed.customCapabilities.map((entry) => entry.capability)
+  const problems = [
+    ...parsed.problems,
+    ...fingerprints.problems,
+    ...validateFingerprintOverrides(fingerprints.overrides, customNames),
+  ]
+  if (problems.length > 0) {
+    throw new AdapterError(`deps() 配置有误：\n  - ${problems.join('\n  - ')}`)
   }
   return {
     enable: ['P01', 'P02', 'P03', 'P04', 'P05', 'P06', 'P07', 'P08', 'P11', 'P12'],
@@ -336,7 +313,7 @@ export function deps(options: DepsOptions = {}): Preset {
       allow: options.allow ?? [],
       deny: options.deny ?? [],
       capabilities: options.capabilities ?? {},
-      fingerprints: options.fingerprints ?? [],
+      fingerprints: fingerprints.overrides,
       unusedDeps: options.unusedDeps === true,
     },
   }

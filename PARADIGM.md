@@ -591,7 +591,7 @@ parser 与语言相关规则属于形态绑定（换形态 = 换 parser + 角色
 
 ```js
 deps({
-  capabilities: { datetime: 'dayjs', 'cli-args': 'commander', http: 'fetch' },
+  capabilities: { datetime: 'dayjs', 'cli-args': 'commander', 'deep-clone': 'structuredClone' },
 })
 ```
 
@@ -615,9 +615,14 @@ deps({
 
 **检测过程**（P06）：
 
-1. 只对**项目声明过的能力**生效（`deps({ capabilities })`）——项目不需要日期处理，就不会被要求用 dayjs。
-2. 逐文件逐行扫该能力的**强指纹**正则，命中记 `{文件, 行}`（每文件只记首个）。
-3. 判断"是否已经在用登记方案"：平台内置（`structuredClone` / `Intl` / `URLSearchParams` / `crypto.randomUUID`）视为满足；否则看**这个文件自己**有没有 import 首选库。
+1. 只对**项目声明过的能力**生效（`deps({ capabilities })`）—— 项目不需要日期处理，就不会被要求用 dayjs。
+   P06 与 P07 同口径；import 豁免用的是**宿主声明的**首选方案。
+   能力名必须能落到生效表上（内置能力，或同一次 `deps()` 里用对象形态登记的自定义能力）；写错名字配置期直接报错。
+2. 整份**遮罩后的 ts 文件**匹配该能力的**强指纹**正则（跨行写法照抓；`^` / `$` 仍按行锚点；CSS 不参与），
+   命中记 `{文件, 行}`（每文件只记首个，行号取全文最早）。
+3. 判断"是否已经在用登记方案"：平台内置（`structuredClone` / `Intl` / `URLSearchParams` / `crypto.randomUUID`）
+   没有 import 可查 —— **命中行 / 下一行匹配 `exemptSyntax` 就豁免**（query-string 声明 `URLSearchParams`，
+   `'?' + new URLSearchParams(…)` 是推荐写法），否则命中即报；需要依赖的能力看**这个文件自己**有没有 import 首选库。
    **为什么按文件判**：按全项目判会放过「部分迁移」—— A 文件已经改用 dayjs、B 文件还在手搓，全项目判定看到 dayjs 就用过就全放过了；而按文件判，B 文件照样被点名（封装在 A 文件里的合法写法不会命中指纹，因此不会误报）。
 4. 未满足 → 每个命中文件一条 error，附推荐写法；`allowOwn: true` 的能力降级为 warn。
 5. **注释先遮罩**再匹配（否则一句"别用 `JSON.parse(JSON.stringify(x))`"的注释就会触发），无 `package.json` 的项目整体跳过依赖类规则。

@@ -482,7 +482,7 @@
 
 ## 七、后补的需求（按疼度排序）
 
-> **开着的：没有了**（`进行中` 0）—— 全部条目都已定：`已完成` 150 · `已委派` 4 · `不做` 7（R-04 / R-49 / R-50 / R-51 / R-52 / R-53 / R-109）。
+> **开着的：没有了**（`进行中` 0）—— 全部条目都已定：`已完成` 153 · `已委派` 4 · `不做` 7（R-04 / R-49 / R-50 / R-51 / R-52 / R-53 / R-109）。
 > **已撤**：R-30 复杂度 · R-70 抑制注释 · **R-94（analytics 面 kit 化）** —— 编号登记在第八节，不复用（见 N-06 / N-07 / N-13）。
 > 本节是**后补的一批**（含已完成与判不做的），按疼度排序；更早的按主题分散在一~六节。
 
@@ -1677,6 +1677,79 @@ messageProps: ['message', 'description', 'title'] })` —— 这两张表是 **a
   `src/packs/core/rules/structure.ts`（S16）· `src/engine/docs.ts`；夹具 `__fixtures__/rules`（注释密集、
   原始行超阈值但代码行不超 → 不报）；单测 `tests/rule-applies-to.test.mjs`；`docs/USAGE.md` /
   `docs/DESIGN.md` §5.1 / §6.2.1 同步；CHANGELOG `[Unreleased]`
+
+**R-165 能力指纹：跨行漏判、平台内置被误伤、声明写错静默失能** · 已完成 · 本体（P06 / P07 + 能力表校验）
+
+- **长这样（漏判）**：`JSON.parse(\n  JSON.stringify(x)\n)`、`'?' +\n  parts.join('&')` 这类跨行写法
+  一个都不报 —— 指纹是**逐行**匹配，而跨行调用是格式化工具的默认输出
+- **长这样（误伤）**：`amount.toLocaleString()`（数字千分位）被当成手搓日期格式化；
+  `phone.replace(/(\d{3})\d{4}(\d{4})/, '$1****$2')`（打码）被当成手搓千分位；
+  `'?' + new URLSearchParams(parts).toString()` 明明用的是平台内置，仍被报「手搓 query-string」；
+  `export const formatDate = (x) => dayjs(x).format('YYYY-MM-DD')`（项目统一封装）被 P07 报「自造轮子」
+- **长这样（静默失能）**：`capabilities: { 'word-forms': 'pluralize' }` —— 内置指纹表里没有 `word-forms`
+  这个能力，P06 遍历时找不到条目就 `continue`，什么都没判；报告与 AGENTS 的选型表却照样显示它。
+  能力名拼错（`datetme: 'dayjs'`）同样静默。本仓自己的 `arch.config.mjs` 就带着一条这样的死声明
+- **会怎样**：漏判让"能力纪律"只在单行写法上成立；误伤让宿主被迫写例外（连同目录里的真违规一起免责）；
+  静默失能是三者里最贵的 —— 覆盖为零而门禁显示 ✔，选型表还替它背书
+- **期望**：① P06 / P07 的指纹改为**整份文件匹配**（跨行写法照报，行号仍指向命中起始行）；
+  ② 数据表用 `exemptSyntax` 声明"命中行 / 下一行已经在该处用首选方案"的证据（内置 query-string 声明
+  `URLSearchParams`），`'?' + new URLSearchParams(...)` 这类推荐写法不再报；③ `toLocaleString(` 与"千分位泛正则"
+  从强指纹降为弱指纹（它们无法与数字千分位 / 串号打码区分，降级后仍需 P07 的命名证据）；
+  ④ P07 跳过"已经 import 首选方案的文件"与"纯再导出名"（封装不是造轮子）；测试脚手架不判（`appliesTo: 'product'`）；
+  ⑤ 新增内置能力 `word-forms`（首选 `pluralize`），让本仓既有声明真的生效；
+  ⑥ 能力名必须是**内置能力或同一次 `deps({ capabilities })` 里用对象形态登记的自定义能力**，
+  否则配置期直接报错（不再静默跳过）
+- **落地**：`src/data/wheel-fingerprints.ts`（word-forms + 两处降级）· `src/engine/deps.ts`（能力名校验）·
+  `src/packs/core/rules/deps.ts`（P06 整份匹配 + 平台同行豁免）· `src/packs/core/rules/deps-adapters.ts`
+  （P07 的 import / 再导出豁免 + product）；夹具 `__fixtures__/wheels`（跨行必报 × 四种误伤不报 × word-forms）；
+  单测 `tests/deps-fingerprints.test.mjs` / `tests/custom-capabilities.test.mjs`；
+  `docs/DESIGN.md` §16、`PARADIGM.md` §12、`docs/USAGE.md` §2.2 同步；CHANGELOG `[Unreleased]`
+
+**R-166 能力指纹加固：emoji 注释遮罩错位 / P07 口径漂移 / 覆盖校验缺口** · 已完成 · 本体（P06 / P07 机制收口）
+
+- **长这样（真 bug）**：注释前出现 emoji 时，`maskTs` 用**码点下标**写 UTF-16 的 `comment.pos/end` ——
+  `// 😀\nJSON.parse(JSON.stringify(v))` 遮罩成 `SON.parse(...)`，P06 漏报；反过来注释里写的指纹
+  可能露出来被报（同一行里的首字符被空格吃掉）
+- **长这样（口径漂移）**：`capabilities: {}` 时 P07 仍报未声明的 deep-equal；宿主声明
+  `datetime: 'date-fns'` 且文件确实 import date-fns，P07 仍拿内置的 dayjs 判「没在用首选方案」
+- **长这样（覆盖缺口）**：`depsPolicyFrom` 不校验 `fingerprints` —— 未知能力 / 坏正则静默无效
+  （坏正则到规则执行时才 `SyntaxError`）；`fingerprints.platform: true` 不被 `policyConflicts` 认，
+  运行期误抛「首选不在 allow」；`import type { Dayjs } from 'dayjs'` 也让整文件豁免 P06
+- **会怎样**：遮罩错位让"注释不算"这条前提在真实文件上不成立（emoji 在文案 / 测试夹具里很常见）；
+  P07 与 P06 口径不一致，"没登记 = 没批准"只对一半规则成立；覆盖写错则门禁静默少判
+- **期望**：① `maskTs` 按 UTF-16 下标遮罩（与 facts 的 pos/end 同单位），emoji 不影响任何指纹；
+  ② P07 与 P06 同口径：只判 `capabilities` 里声明过的能力，import 豁免用**宿主声明的** preferred；
+  ③ `deps()` 与 `depsPolicyFrom` 共用同一份 fingerprints 校验（形状 / 未知能力 / 坏正则 / 零长模式）；
+  ④ `policyConflicts` 认 `fingerprints[].platform`（true 并入、false 剔除）；⑤ `typeOnly` import 不算"在用"；
+  ⑥ 报告行号取全文最早命中；P07 跳过零长匹配
+- **落地**：`src/packs/core/rules/mask.ts` · `src/engine/deps.ts` · `src/presets/design-system.ts` ·
+  `src/packs/core/rules/deps-adapters.ts` · `src/packs/core/rules/fingerprint-scan.ts` · `src/packs/core/rules/deps.ts`；
+  夹具 `__fixtures__/wheels`（emoji 跨行必报 × 注释不报 × type-only 不豁免 × 未声明能力不报 P07）；
+  单测 `tests/custom-capabilities.test.mjs` / `tests/wheel-fingerprints.test.mjs` / `tests/deps-fingerprints.test.mjs`；
+  `docs/DESIGN.md` §16、`PARADIGM.md` §12、`docs/USAGE.md` §2.2 同步；CHANGELOG `[Unreleased]`
+
+**R-167 能力指纹的精度与覆盖补完（批 2 + 批 3）** · 已完成 · 本体（数据表 + 扫描范围）
+
+- **长这样（误伤）**：`response.setHeader('Last-Modified', date.toUTCString())`、`<DatePicker format="YYYY-MM-DD" />`
+  被 datetime 强指纹报 error；`'#' + Math.random().toString(16).slice(2, 8)`（随机颜色）被 unique-id 报；
+  `{ person: 'people' }`（业务字典）被 word-forms 报；`localStorage` 里存 JSON 快照
+  （`JSON.parse(JSON.stringify(x))` 是刻意要 JSON-safe）被 deep-clone 报
+- **长这样（漏判）**：`process.argv.at(2)` / `for (const a of process.argv)` 不报 cli-args；
+  `JSON.stringify(pick(a, b)) == JSON.stringify(c)`（参数里有嵌套括号）、
+  `encodeURIComponent(String(v)) + '='` 全漏 —— `[^)]*` 遇内层括号就断；
+  递归 clone 用 `Object.keys` / `typeof x === 'object'` 时没有弱证据，P07 永不参与；
+  `isMail` 不在 validation 的命名指纹里
+- **会怎样**：error 级误伤逼宿主写例外（连同真违规一起免责）；漏判让常见写法完全不进判定
+- **期望**：① `toUTCString` 与 `YYYY-MM-DD` 降为弱指纹（格式常量不是手搓实现）；
+  ② unique-id 对"随机颜色"（`'#' + Math.random()` / 模板串）豁免；③ word-forms 去掉强指纹，
+  只在"弱形态 + 自研同名"时 P07 提示；④ deep-clone 对 `localStorage` / `sessionStorage` / `indexedDB`
+  的同行写法豁免；⑤ P06 只扫 ts（CSS/SCSS 的 `//` 注释不再被当成代码）；
+  ⑥ 覆盖补完：`argv.at` / `for...of argv` / 跨行点号、嵌套括号用有界匹配、递归 clone/equal 的
+  `Object.keys` / `typeof === 'object'` 弱指纹、debounce/validation 的常见命名
+- **落地**：`src/data/wheel-fingerprints.ts` · `src/packs/core/rules/deps.ts`（只扫 ts）；
+  夹具 `__fixtures__/wheels`（四种误伤不报 × 五处漏判必报）；单测
+  `tests/wheel-fingerprints.test.mjs` / `tests/deps-fingerprints.test.mjs`；`docs/DESIGN.md` §16、
+  `PARADIGM.md` §12 同步；CHANGELOG `[Unreleased]`
 
 ## 八、不做（写在这里是为了不再重复讨论）
 

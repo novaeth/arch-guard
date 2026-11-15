@@ -25,6 +25,14 @@ export interface WheelFingerprint {
   syntax?: string[]
   /** 弱指纹：需与命名指纹叠加 */
   softSyntax?: string[]
+  /**
+   * **已在用首选方案**的证据：强指纹命中行 / 下一行出现这些形态时豁免（R-165）。
+   *
+   * 为什么是数据而不是"首选方案名字"的通用推断：`'?' + new URLSearchParams(…)` 里首选 API 就在同一行，
+   * 而自定义能力可能把 `localStorage` 当首选（违规写法 `localStorage.setItem(…)` 同样含这个名字）——
+   * 通用推断会把真违规豁免掉。这里逐能力显式声明。
+   */
+  exemptSyntax?: string[]
   /** 该能力的常见公开 API 名（命名指纹：自研模块导出名重合 ≥2 即疑似） */
   apiNames?: string[]
   /** 报错时给的推荐写法 */
@@ -42,12 +50,10 @@ export const wheelFingerprints: WheelFingerprint[] = [
       // 手搓格式化：locale API / 模板串 / 手动拼年月日
       '\\.toLocaleDateString\\(',
       '\\.toLocaleTimeString\\(',
-      '\\.toLocaleString\\(',
       // 人类可读格式化同样该走 dayjs；**机器格式 `toISOString()` 不在此列**（那是序列化，不是手搓）
-      '\\.to(?:DateString|TimeString|UTCString)\\(\\)',
+      '\\.to(?:DateString|TimeString)\\(\\)',
       '\\bIntl\\.DateTimeFormat\\b',
       '\\.toISOString\\(\\)\\s*\\.\\s*slice\\(',
-      '\\bYYYY[-/]MM[-/]DD\\b',
       /**
        * 手动取 / 改日期分量：**按族写，不再一条条列**。
        *
@@ -64,9 +70,9 @@ export const wheelFingerprints: WheelFingerprint[] = [
        */
       '\\.get(?:FullYear|Month|Date|Day|Hours|Minutes|Seconds|Milliseconds|TimezoneOffset|Year|UTC(?:FullYear|Month|Date|Day|Hours|Minutes|Seconds|Milliseconds))\\(\\)',
       '\\.set(?:FullYear|Month|Date|Hours|Minutes|Seconds|Milliseconds|Year|UTC(?:FullYear|Month|Date|Hours|Minutes|Seconds|Milliseconds))\\(',
-      // 用毫秒数手算日期差
+      // 用毫秒数手算日期差（有界匹配：参数里有嵌套括号也能跨过去，R-167）
       'Date\\.now\\(\\)\\s*[-+]\\s*\\d{4,}',
-      'new Date\\([^)]*\\)\\.getTime\\(\\)\\s*[-+]\\s*\\d{4,}',
+      'new Date\\([\\s\\S]{0,200}?\\)\\.getTime\\(\\)\\s*[-+]\\s*\\d{4,}',
       // 字符串日期**解析**：`Date.parse` 这个 API 只用于解析（几乎零误报）；
       // `new Date('…')` 只认**字面量**参数 —— `new Date(variable)` 可能是时间戳，静态判不出，
       // 宁可不管也不要误伤（那条边界写在 note 里）。
@@ -87,8 +93,19 @@ export const wheelFingerprints: WheelFingerprint[] = [
     ],
     // P07（自造轮子）用**弱指纹**：这些写法本身正常，但和"自研了 formatDate/parseDate 这类函数"叠一起
     // 就是"手搓了一个日期库"。弱指纹门槛低没关系 —— P07 还要求**同名自研**才报，而且只是 warn。
-    // P07 的精度由**命名指纹**（自研了 formatDate / parseDate 这类函数）把门，所以弱指纹可以放宽成族
-    softSyntax: ['new Date\\(', '\\.get[A-Z]\\w*\\(', '\\.set[A-Z]\\w*\\('],
+    // P07 的精度由**命名指纹**（自研了 formatDate / parseDate 这类函数）把门，所以弱指纹可以放宽成族。
+    // `toLocaleString(` 只能在这里：它同时是**数字千分位**的合法写法（`amount.toLocaleString()`），
+    // 静态分不出 Date 还是 Number —— 放强指纹会把最常见的金额展示全部报成"手搓日期"（R-165）。
+    // `toUTCString()` 是 HTTP `Last-Modified` 的唯一写法（dayjs 没有等价物）；`YYYY-MM-DD` 只是
+    // 格式常量（`<DatePicker format="YYYY-MM-DD" />`）—— 两者都不证明"手搓日期库"，降弱指纹（R-167）。
+    softSyntax: [
+      'new Date\\(',
+      '\\.get[A-Z]\\w*\\(',
+      '\\.set[A-Z]\\w*\\(',
+      '\\.toLocaleString\\(',
+      '\\.toUTCString\\(\\)',
+      '\\bYYYY[-/]MM[-/]DD\\b',
+    ],
     hint: "用 dayjs：dayjs(x).format('YYYY-MM-DD')、dayjs(x).add(1, 'day')",
     note:
       'antd 内部就用 dayjs，用了组件库的项目基本已经间接装了它。' +
@@ -101,9 +118,10 @@ export const wheelFingerprints: WheelFingerprint[] = [
     preferred: ['commander'],
     syntax: [
       // 按 argv 的**用法**成族，而不是只列几个方法：索引取值 `process.argv[2]` 与
-      // `filter/forEach/map/reduce/…` 都同样是"手写 argv 解析"
+      // `filter/forEach/map/reduce/at/…`、`for (const a of process.argv)` 都同样是"手写 argv 解析"
       'process\\.argv\\[',
-      'process\\.argv\\.(?:slice|indexOf|includes|splice|find|filter|forEach|map|reduce|some|every)\\(',
+      'process\\.argv\\s*\\.\\s*(?:slice|at|indexOf|includes|splice|find|filter|forEach|map|reduce|some|every)\\(',
+      '\\bof\\s+process\\.argv\\b',
     ],
     // `apiNames` 必须与 `softSyntax` 成对才有意义（P07 = 弱指纹 **且** 自研同名）——
     // 只写 apiNames 等于声明了一个永远不会被读的命名指纹
@@ -122,9 +140,16 @@ export const wheelFingerprints: WheelFingerprint[] = [
     softSyntax: [
       'Object\\.assign\\(',
       'Array\\.isArray\\(',
+      'Object\\.keys\\(',
+      'typeof\\s+\\w+\\s*===\\s*[\'"]object[\'"]',
       '\\.hasOwnProperty\\(',
       'Reflect\\.ownKeys\\(',
     ],
+    /**
+     * JSON 深拷贝在"必须 JSON-safe"的场景是**正确写法**（localStorage / IndexedDB 只能存 JSON）——
+     * 命中行 / 下一行碰到存储 API 就不再报（R-167）。其它场景（普通内存对象）仍按 error。
+     */
+    exemptSyntax: ['\\b(?:local|session)Storage\\b', '\\bindexedDB\\b'],
     apiNames: ['deepClone', 'cloneDeep', 'deepCopy'],
     hint: '用结构化克隆：structuredClone(x)（Node 17+ / 浏览器内置）；要保留类实例再用成熟库',
   },
@@ -141,6 +166,8 @@ export const wheelFingerprints: WheelFingerprint[] = [
       '\\[1e7\\]\\+-1e3',
     ],
     softSyntax: ['Math\\.random\\(', 'Date\\.now\\(\\)'],
+    // 随机颜色（`'#' + Math.random().toString(16)` / `` `#${…}` ``）不是 ID 生成 —— 同行豁免（R-167）
+    exemptSyntax: ['[\'"]#[\'"]\\s*\\+', '`#\\$\\{'],
     apiNames: ['uuid', 'generateId', 'uniqueId', 'nanoid', 'randomId'],
     hint: '用平台内置：crypto.randomUUID()（需要短 ID 用 nanoid）',
   },
@@ -148,13 +175,11 @@ export const wheelFingerprints: WheelFingerprint[] = [
     capability: 'number-format',
     preferred: ['Intl.NumberFormat'],
     platform: true,
-    syntax: [
-      '\\.toFixed\\(\\d+\\)\\.replace\\(',
-      // 千分位分组成族：不管写成 `\B(?=(\d{3})` 还是 `(\d)(?=(\d{3})+(?!\d))`，
-      // 正则里出现 `\d{3}` 就是同一个手搓
-      'replace\\(/[^/]*\\\\d\\{3\\}[^/]*/',
-    ],
-    softSyntax: ['\\.toFixed\\(', '\\.toLocaleString\\('],
+    syntax: ['\\.toFixed\\(\\d+\\)\\.replace\\('],
+    // 千分位分组的"泛正则"（`\d{3}`）不再进强指纹：打码 / 校验 / 格式化日期里的正则同样会出现
+    // `\d{3}`（R-165 实测 `phone.replace(/(\d{3})\d{4}(\d{4})/, …)` 被误报）。降为弱指纹后，
+    // 仍需 P07 的命名证据（自研了 formatNumber / formatAmount 这类名字）才提示。
+    softSyntax: ['\\.toFixed\\(', '\\.toLocaleString\\(', 'replace\\(/[^/]*\\\\d\\{3\\}[^/]*/'],
     apiNames: [
       'formatNumber',
       'formatCurrency',
@@ -169,9 +194,14 @@ export const wheelFingerprints: WheelFingerprint[] = [
     capability: 'deep-equal',
     preferred: ['node:util.isDeepStrictEqual'],
     platform: true,
-    // `==` / `===` / `!=` / `!==` 都是同一类错误（宽松相等更常见）；只认 `===` 会漏一半
-    syntax: ['JSON\\.stringify\\([^)]*\\)\\s*[!=]==?\\s*JSON\\.stringify\\('],
-    softSyntax: ['JSON\\.stringify\\('],
+    // `==` / `===` / `!=` / `!==` 都是同一类错误（宽松相等更常见）；只认 `===` 会漏一半。
+    // 有界匹配：参数里有嵌套括号（`pick(a, b)`）也能跨过去（R-167），200 字符是"一个表达式"的量级。
+    syntax: ['JSON\\.stringify\\([\\s\\S]{0,200}?\\)\\s*[!=]==?\\s*JSON\\.stringify\\('],
+    softSyntax: [
+      'JSON\\.stringify\\(',
+      'Object\\.keys\\(',
+      'typeof\\s+\\w+\\s*===\\s*[\'"]object[\'"]',
+    ],
     apiNames: ['deepEqual', 'isEqual', 'deepCompare', 'objectsEqual'],
     hint: '用 isDeepStrictEqual(a, b)（Node 内置）或成熟库的 isEqual；JSON 比较会漏掉键顺序与 undefined',
   },
@@ -184,10 +214,11 @@ export const wheelFingerprints: WheelFingerprint[] = [
       '[\'"]\\?[\'"]\\s*(?:\\+|\\.concat\\()',
       '`\\?\\$\\{',
       'join\\([\'"]&[\'"]\\)',
-      // 手写 k=v 编码（URLSearchParams 自带编码）
-      'encodeURIComponent\\([^)]*\\)\\s*\\+\\s*[\'"]=[\'"]',
+      // 手写 k=v 编码（URLSearchParams 自带编码）；有界匹配跨过嵌套括号（R-167）
+      'encodeURIComponent\\([\\s\\S]{0,200}?\\)\\s*\\+\\s*[\'"]=[\'"]',
     ],
     softSyntax: ['encodeURIComponent\\('],
+    exemptSyntax: ['\\bURLSearchParams\\b'],
     apiNames: ['buildQuery', 'serializeQuery', 'parseQuery', 'toQueryString'],
     hint: '用 new URLSearchParams({ ... }).toString()（平台内置，自动处理编码）',
     allowOwn: true,
@@ -202,7 +233,15 @@ export const wheelFingerprints: WheelFingerprint[] = [
       'requestAnimationFrame\\(',
       'performance\\.now\\(\\)\\s*-',
     ],
-    apiNames: ['debounce', 'throttle', 'rateLimit'],
+    apiNames: [
+      'debounce',
+      'throttle',
+      'rateLimit',
+      'useDebounce',
+      'useThrottle',
+      'debounceFn',
+      'throttleFn',
+    ],
     hint: '用成熟实现（lodash-es 的 debounce/throttle，或项目既有的 hook 库）；手写版常漏掉取消防抖与 this/参数转发',
     allowOwn: true,
   },
@@ -217,11 +256,30 @@ export const wheelFingerprints: WheelFingerprint[] = [
       'isEmail',
       'isPhone',
       'isUrl',
+      'isMail',
+      'isValidEmail',
+      'checkEmail',
+      'isValidPhone',
       'validateForm',
     ],
     hint: '用 schema 校验库（zod）声明式校验，别散着手写正则与 if',
     allowOwn: true,
     note: '组件库表单自带校验规则的，优先用它',
+  },
+  {
+    capability: 'word-forms',
+    preferred: ['pluralize'],
+    // 手抄不规则复数表**不再进强指纹**（R-167）：`{ person: 'people' }` 也可能是业务数据字典
+    // （HR / 家谱 / 翻译表）。它现在只是弱形态，必须与"自研了 pluralize / singularize"叠一起才提示。
+    // 后缀判定 / 截尾字母同样只是普通字符串逻辑。
+    softSyntax: [
+      '\\b(?:child|person|man|woman|mouse|goose|tooth|foot)\\b\\s*:\\s*[\'"](?:children|people|men|women|mice|geese|teeth|feet)[\'"]',
+      'endsWith\\([\'"](?:ies|es|s)[\'"]\\)',
+      'replace\\(/[^/]*(?:ies|es|s)\\$/',
+    ],
+    apiNames: ['pluralize', 'singularize', 'isPlural', 'isSingular', 'toPlural', 'toSingular'],
+    hint: '用 pluralize：pluralize.plural(word) / pluralize.singular(word) / pluralize.isPlural(word)',
+    note: '词形是"越老越准"的东西：手写规则在不规则复数上会逐个漏（S31 的词形判定本身也用的 pluralize）',
   },
 ]
 

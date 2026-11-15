@@ -12,9 +12,12 @@ import type { Facts } from '../../../engine/types.js'
  */
 export function maskTs(text: string, facts: Facts | undefined): string {
   if (facts && facts.comments.length > 0) {
-    const chars = [...text]
+    // 必须按 **UTF-16 下标**拆分：`facts.comments` 的 pos/end 来自 TS scanner（UTF-16 offset），
+    // 而 `[...text]` 是**码点**数组 —— 文件里有一个 emoji 就会整体错位，注释后的首字符被吃掉
+    // （实测 `// 😀\nJSON.parse(JSON.stringify(v))` 遮罩成 `SON.parse(...)`，P06 直接漏报）。
+    const chars = text.split('')
     for (const comment of facts.comments) {
-      for (let index = comment.pos; index < comment.end; index += 1) {
+      for (let index = comment.pos; index < comment.end && index < chars.length; index += 1) {
         if (chars[index] !== '\n') chars[index] = ' '
       }
     }

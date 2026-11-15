@@ -1,8 +1,17 @@
 import { existsSync, readFileSync } from 'node:fs'
 
-import { wheelFingerprints, type WheelFingerprint } from '../data/wheel-fingerprints.js'
+import type { WheelFingerprint } from '../data/wheel-fingerprints.js'
+import {
+  BUILTIN_CAPABILITY_NAMES,
+  isPlainObject,
+  parseFingerprintOverrides,
+  validateFingerprintOverrides,
+  type FingerprintOverride,
+} from './fingerprint-overrides.js'
 import { builtinModules } from 'node:module'
 import { join } from 'node:path'
+
+export type { FingerprintOverride } from './fingerprint-overrides.js'
 
 /**
  * 依赖纪律的数据层：读取项目的依赖事实 + 把 config.params 里的策略解析成强类型。
@@ -33,38 +42,6 @@ export interface ProjectDeps {
 }
 
 /**
- * **指纹覆盖**（R-73）：项目对某个能力的指纹证据加 / 删、或放宽。
- *
- * 为什么需要：内置的轮子指纹表是通用判断 ——
- *   - **收紧**：企业规范只认内部实现，想让某条形态也命中；
- *   - **放宽**：项目里那个 `@org/utils` 其实很成熟，或某个形态已经是"项目认可的封装"，
- *     不该继续提示。
- *
- * **首选方案不在这里**（那是 `capabilities` 的活，一个事实只有一个出处）；
- * 这里只管"什么形态算手搓"与"这个能力允不允许自研"。
- */
-export interface FingerprintOverride {
-  /** 能力标识（必须与内置表里的某个能力同名 —— 拼错会让这条覆盖静默失效） */
-  capability: string
-  /** 追加**强**指纹（单证据即报） */
-  addSyntax?: string[]
-  /** 删掉内置的强指纹（按 pattern 原文精确匹配） */
-  removeSyntax?: string[]
-  /** 追加**弱**指纹（需与命名指纹叠加） */
-  addSoftSyntax?: string[]
-  /** 删掉内置的弱指纹 */
-  removeSoftSyntax?: string[]
-  /** 覆盖该能力的常见 API 名清单（命名指纹那一半） */
-  apiNames?: string[]
-  /** 放宽 / 收紧「允许项目自研」：true → P06 降级为 warn */
-  allowOwn?: boolean
-  /** 改判"平台内置能力"（平台能力没有 import 可查 → 没有豁免） */
-  platform?: boolean
-  /** 覆盖推荐写法（进报告 hint） */
-  hint?: string
-}
-
-/**
  * **自定义能力**（R-154）：`deps({ capabilities })` 的对象形态。
  *
  * 内置能力由 `data/wheel-fingerprints.ts` 提供证据；宿主自己那套（企业请求层 / 事件总线 / 内部库）
@@ -78,6 +55,8 @@ export interface CustomCapability {
   syntax?: string[]
   /** 弱指纹：需与 `apiNames` 叠加（P07 的两类证据） */
   softSyntax?: string[]
+  /** 命中行 / 下一行出现这些形态时豁免：已经在该处使用首选方案（如 `URLSearchParams`，R-165） */
+  exemptSyntax?: string[]
   /** 该能力的常见公开 API 名（命名指纹，大小写不敏感） */
   apiNames?: string[]
   /** 平台内置：没有 import 可查 → 命中即报，且不要求出现在 `allow` 里 */
@@ -105,14 +84,6 @@ export interface DepsPolicy {
   customCapabilities: WheelFingerprint[]
   fingerprints: FingerprintOverride[]
 }
-
-const STRING_FIELDS = [
-  'addSyntax',
-  'removeSyntax',
-  'addSoftSyntax',
-  'removeSoftSyntax',
-  'apiNames',
-] as const
 
 function asStringArray(value: unknown): string[] {
   return Array.isArray(value)
@@ -191,32 +162,6 @@ export function readProjectDeps(root: string, imported: Iterable<string>): Proje
   }
 }
 
-function overridesFrom(value: unknown): FingerprintOverride[] {
-  if (!Array.isArray(value)) return []
-  const out: FingerprintOverride[] = []
-  for (const item of value) {
-    if (!item || typeof item !== 'object') continue
-    const raw = item as Record<string, unknown>
-    if (typeof raw.capability !== 'string' || raw.capability === '') continue
-    const override: FingerprintOverride = { capability: raw.capability }
-    for (const field of STRING_FIELDS) {
-      const list = asStringArray(raw[field])
-      if (list.length > 0) override[field] = list
-    }
-    if (typeof raw.allowOwn === 'boolean') override.allowOwn = raw.allowOwn
-    if (typeof raw.platform === 'boolean') override.platform = raw.platform
-    if (typeof raw.hint === 'string' && raw.hint !== '') override.hint = raw.hint
-    out.push(override)
-  }
-  return out
-}
-
-function isPlainObject(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
-}
-
-const BUILTIN_CAPABILITY_NAMES = new Set(wheelFingerprints.map((entry) => entry.capability))
-
 function readStringArray(
   raw: Record<string, unknown>,
   field: string,
@@ -239,11 +184,18 @@ function checkPatterns(
   problems: string[],
 ): void {
   for (const pattern of patterns) {
+    let regex: RegExp
     try {
-      new RegExp(pattern)
+      regex = new RegExp(pattern)
     } catch {
       problems.push(
         `自定义能力「${capability}」的 ${field} 里「${pattern}」不是合法正则 —— 这条证据永远不会命中`,
+      )
+      continue
+    }
+    if (regex.test('')) {
+      problems.push(
+        `自定义能力「${capability}」的 ${field} 里「${pattern}」会匹配空串（零长命中）—— 会命中任意位置`,
       )
     }
   }
@@ -287,8 +239,10 @@ function parseCapability(name: string, value: unknown): ParsedCapability {
   const syntax = readStringArray(value, 'syntax', name, problems)
   const softSyntax = readStringArray(value, 'softSyntax', name, problems)
   const apiNames = readStringArray(value, 'apiNames', name, problems)
+  const exemptSyntax = readStringArray(value, 'exemptSyntax', name, problems)
   checkPatterns(name, 'syntax', syntax, problems)
   checkPatterns(name, 'softSyntax', softSyntax, problems)
+  checkPatterns(name, 'exemptSyntax', exemptSyntax, problems)
 
   if (syntax.length === 0) {
     if (softSyntax.length === 0) {
@@ -323,6 +277,7 @@ function parseCapability(name: string, value: unknown): ParsedCapability {
     hint,
     ...(syntax.length > 0 ? { syntax } : {}),
     ...(softSyntax.length > 0 ? { softSyntax } : {}),
+    ...(exemptSyntax.length > 0 ? { exemptSyntax } : {}),
     ...(apiNames.length > 0 ? { apiNames } : {}),
     ...(value.platform === true ? { platform: true } : {}),
     ...(value.allowOwn === true ? { allowOwn: true } : {}),
@@ -347,6 +302,13 @@ export function parseCapabilities(raw: unknown): {
   const problems: string[] = []
   if (!isPlainObject(raw)) return { capabilities, customCapabilities, problems }
 
+  // 对象形态登记的名字（即使该条目本身有错）—— 字符串形态引用它时不该再报"未知能力"（一次错报一处）
+  const registered = new Set(
+    Object.entries(raw)
+      .filter(([, value]) => isPlainObject(value))
+      .map(([name]) => name),
+  )
+
   for (const [name, value] of Object.entries(raw)) {
     const parsed = parseCapability(name, value)
     problems.push(...parsed.problems)
@@ -354,20 +316,37 @@ export function parseCapabilities(raw: unknown): {
     capabilities[name] = parsed.preferred
     if (parsed.fingerprint) customCapabilities.push(parsed.fingerprint)
   }
+
+  // R-165：能力名必须能落到生效表上。否则 P06 在内置指纹表里找不到条目就 `continue` ——
+  // 覆盖为零，而报告与 `--render-docs` 的选型表照样显示它（本仓自己的 `word-forms` 就曾这样静默失效）。
+  for (const name of Object.keys(capabilities)) {
+    if (BUILTIN_CAPABILITY_NAMES.has(name) || registered.has(name)) continue
+    problems.push(
+      `能力「${name}」没有内置指纹，也没有在同一次 deps({ capabilities }) 里用对象形态登记证据 —— ` +
+        `P06/P07 会静默跳过它。内置能力：${[...BUILTIN_CAPABILITY_NAMES].join(' / ')}`,
+    )
+  }
   return { capabilities, customCapabilities, problems }
 }
 
 export function depsPolicyFrom(params: Record<string, unknown>): DepsPolicy {
   const parsed = parseCapabilities(params.capabilities)
-  if (parsed.problems.length > 0) {
-    throw new Error(`依赖策略配置错误：\n  - ${parsed.problems.join('\n  - ')}`)
+  const fingerprints = parseFingerprintOverrides(params.fingerprints)
+  const customNames = parsed.customCapabilities.map((entry) => entry.capability)
+  const problems = [
+    ...parsed.problems,
+    ...fingerprints.problems,
+    ...validateFingerprintOverrides(fingerprints.overrides, customNames),
+  ]
+  if (problems.length > 0) {
+    throw new Error(`依赖策略配置错误：\n  - ${problems.join('\n  - ')}`)
   }
   return {
     allow: asStringArray(params.allow),
     deny: asStringArray(params.deny),
     capabilities: parsed.capabilities,
     customCapabilities: parsed.customCapabilities,
-    fingerprints: overridesFrom(params.fingerprints),
+    fingerprints: fingerprints.overrides,
   }
 }
 
@@ -384,6 +363,12 @@ export function policyConflicts(
   // 不要求出现在 allow 里。只看内置表就会把这类能力误报成「首选不在白名单」。
   for (const entry of policy.customCapabilities ?? []) {
     if (entry.platform === true) platform.add(entry.capability)
+  }
+  // `fingerprints` 的 platform 覆盖同样要认（R-166）：宿主把某能力改成平台内置 / 取消平台身份时，
+  // 对账不能还按旧身份算 —— 否则运行期误抛「首选不在 allow」。
+  for (const override of policy.fingerprints ?? []) {
+    if (override.platform === true) platform.add(override.capability)
+    else if (override.platform === false) platform.delete(override.capability)
   }
   const conflicts: string[] = []
   for (const [capability, preferred] of Object.entries(policy.capabilities)) {

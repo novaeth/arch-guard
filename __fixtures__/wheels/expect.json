@@ -1,12 +1,21 @@
 {
   "findings": [
+    { "rule": "P06", "file": "src/shared/lib/argv-at.ts" },
     { "rule": "P06", "file": "src/shared/lib/argv.ts" },
     { "rule": "P06", "file": "src/shared/lib/clone-json.ts" },
+    { "rule": "P07", "file": "src/shared/lib/clone-recursive-keys.ts" },
     { "rule": "P07", "file": "src/shared/lib/clone-recursive.ts" },
     { "rule": "P06", "file": "src/shared/lib/deep-equal.ts" },
+    { "rule": "P06", "file": "src/shared/lib/emoji-spill.ts" },
+    { "rule": "P06", "file": "src/shared/lib/multiline-date.ts" },
+    { "rule": "P06", "file": "src/shared/lib/multiline.ts" },
+    { "rule": "P06", "file": "src/shared/lib/nested-parens.ts" },
     { "rule": "P06", "file": "src/shared/lib/number-format.ts" },
     { "rule": "P06", "file": "src/shared/lib/query-string.ts" },
-    { "rule": "P06", "file": "src/shared/lib/unique-id.ts" }
+    { "rule": "P06", "file": "src/shared/lib/type-only-dayjs.ts" },
+    { "rule": "P06", "file": "src/shared/lib/unique-id.ts" },
+    { "rule": "P07", "file": "src/shared/lib/validate-is-mail.ts" },
+    { "rule": "P07", "file": "src/shared/lib/word-forms.ts" }
   ],
   "exact": true
 }

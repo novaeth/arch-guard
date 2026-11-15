@@ -30,6 +30,61 @@
 - 夹具 `__fixtures__/rules` 新增「原始行超阈值、代码行不超 → 不报」的合规样例；
   `tests/rule-applies-to.test.mjs` 同时钉住 `big.ts` 仍报。见 R-164、DESIGN §5.1 / §6.2.1。
 
+### Changed（R-165：能力指纹 —— 跨行照抓、同形合法写法不再误报）
+
+> **行为变更**：报告格式 / 退出码 / `apiVersion` / `NOTICE_CODES` 不变。
+> 配置面有一处**新增的 fail-closed**：`capabilities` 里写了既不是内置能力、也没有在同一次 `deps()`
+> 里用对象形态登记的名字时，**配置加载直接报错**（此前静默跳过 → P06 覆盖为零）。
+> 迁移：改成内置能力名，或用对象形态登记自定义能力（R-154）。
+
+- 强指纹从**逐行**改为**整份文件匹配**（`gm`，`^` / `$` 仍是行锚点）：跨行
+  `JSON.parse(\n JSON.stringify(…)`、`new Date(\n '…'` 不再漏判。
+- **平台能力**用数据表的 `exemptSyntax` 声明"已经在该处用首选方案"的形态：内置 query-string 声明
+  `URLSearchParams` —— `'?' + new URLSearchParams(…)` 是推荐写法，不再报「手搓 query-string」。
+- 两处强指纹降级为弱指纹（仍需 P07 的命名证据）：`toLocaleString(`（数字千分位会命中）与
+  千分位泛正则（手机号打码 / 校验里的 `\d{3}` 会命中）。
+- P07 跳过「文件已 import 首选方案」（统一封装，`formatDate = (x) => dayjs(x).format(…)`）
+  与「纯再导出名」；并标 `appliesTo: 'product'` —— 测试脚手架不再被当成自造轮子。
+- 新增内置能力 `word-forms`（首选 `pluralize`）：手抄不规则复数表（`child: 'children'`）报 P06。
+  本仓 `arch.config.mjs` 里那条 `'word-forms': 'pluralize'` 从**死声明**变成真覆盖。
+- 夹具 `__fixtures__/wheels` 覆盖跨行必报 × 四种误伤不报 × word-forms；
+  `tests/wheel-fingerprints.test.mjs` / `tests/custom-capabilities.test.mjs` 同步。见 R-165、DESIGN §16。
+
+### Fixed（R-166：能力指纹加固 —— emoji 遮罩错位 / P07 口径 / 覆盖校验）
+
+> **行为变更**：报告格式 / 退出码 / `apiVersion` / `NOTICE_CODES` 不变。
+> 两处配置期 fail-closed 收紧：① `fingerprints` 的形状 / 未知能力 / 坏正则 / 零长模式在
+> `depsPolicyFrom()`（配置加载）也报错，不再只有 `deps()` 报；② P07 与 P06 同口径，只判已声明能力 ——
+> 未声明能力的自研实现不再提示。
+
+- **注释遮罩按 UTF-16 下标写**（`maskTs`）：以前用码点数组配 UTF-16 的 `comment.pos/end`，
+  文件里有 emoji 时注释后首字符被吃掉（`// 😀\nJSON.parse(…)` → `SON.parse(…)`，P06 漏报），
+  或把注释内容露出来（误报）。
+- **P07 跟 P06 同口径**：只遍历 `capabilities` 里声明过的能力；import 豁免用**宿主声明的** preferred
+  （声明 `datetime: 'date-fns'` 就认 date-fns，不再拿内置 dayjs 判）。
+- **覆盖校验两条入口共用**：`deps()` 与 `depsPolicyFrom()` 读同一份解析（形状 / 未知能力 / 坏正则 /
+  零长模式）；`apiNames: []` 可以真的清空命名指纹；`policyConflicts` 认 `fingerprints[].platform`。
+- `import type { Dayjs } from 'dayjs'` 不再算"已在使用首选方案"；P06 报告行号取**全文最早**命中；
+  P07 跳过零长匹配。
+- 夹具 `__fixtures__/wheels` 补 emoji 跨行必报 / 注释不误报 / type-only 不豁免 / 未声明能力不跑 P07；
+  `__fixtures__/adapters` 显式声明 `debounce-throttle`（P07 现在要求能力已声明）。见 R-166、DESIGN §16。
+
+### Changed（R-167：能力指纹的数据精度与覆盖补完）
+
+> **行为变更，方向是"少报误伤、多报真违规"**：报告格式 / 退出码 / `apiVersion` 不变。
+
+- **误伤收敛**：`toUTCString()`（HTTP `Last-Modified`）与 `YYYY-MM-DD`（格式常量）降为弱指纹；
+  unique-id 对随机颜色（`'#' + Math.random()` / 模板串）同行豁免；word-forms 去掉强指纹
+  （业务字典 `{ person: 'people' }` 不再报，只在"弱形态 + 自研同名"时 P07 提示）；
+  deep-clone 对 `localStorage` / `sessionStorage` / `indexedDB` 的 JSON-safe 快照同行豁免。
+- **P06 只扫 ts**：CSS/SCSS 的 `//` 注释不再被当成代码（facts 只对 ts 提取，兜底遮罩认不出 `//`）。
+- **覆盖补完**：cli-args 加 `process.argv.at()` / `for...of process.argv` / 跨行点号；
+  deep-equal 与 query-string 的嵌套参数改**有界匹配**（`JSON.stringify(pick(a,b))` 不再漏）；
+  递归 clone/equal 补 `Object.keys` / `typeof === 'object'` 弱指纹；debounce / validation 补常见命名
+  （`useDebounce` / `isMail` 等）。
+- 夹具 `__fixtures__/wheels` 补「四种误伤不报 × 五处漏判必报」；`tests/deps-fingerprints.test.mjs`
+  加 css 记录零命中用例。见 R-167、DESIGN §16.2 / PARADIGM §12.2。
+
 ### Added（R-154：自定义 capability —— 宿主可以登记本体没有的能力）
 
 - `deps({ capabilities })` 的值除字符串（`{ datetime: 'dayjs' }`）外，新增**对象形态**：

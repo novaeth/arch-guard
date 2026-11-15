@@ -108,6 +108,14 @@ test('P06：判定跟着生效表走 —— 内置表下 JSON 深拷贝要报', 
   assert.equal(findings[0].file, 'src/shared/lib/clone.ts')
 })
 
+test('R-167：P06 只扫 ts —— CSS/SCSS 注释里的示例不算代码', () => {
+  const rel = 'src/shared/styles/comment.scss'
+  const sources = { [rel]: '// JSON.parse(JSON.stringify(v))\n' }
+  const base = ctx({ capabilities: { 'deep-clone': 'structuredClone' }, sources })
+  base.records = [{ rel, kind: 'css', layer: 3, captures: {} }]
+  assert.deepEqual(rule('P06').run(base), [], 'css 记录不参与指纹扫描')
+})
+
 test('P06 / P07：真实覆盖对象生效（P06 删形态 → 不报；P07 加弱指纹 + API 名 → 报）', () => {
   const capabilities = { 'deep-clone': 'structuredClone', 'debounce-throttle': 'lodash' }
   const sources = {
