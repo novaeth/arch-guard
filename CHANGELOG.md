@@ -11,11 +11,21 @@
 >   回填只搬位置、不改内容，归属依据是「该小节首次出现在哪个标签区间」。
 > - **0.3.4–0.3.8 也是同样办法回填的**：切 `[0.4.0]` 时发现这几节其实早已随那些标签发布，只是堆在
 >   `[Unreleased]` 里（归属按 `git tag --contains <引入该节的提交>` 判定）。
+> - **0.11.1–0.11.3 也是事后回填的**：切 `[0.12.0]` 时按同一办法归属 —— R-154 归 0.11.1，
+>   R-155–R-163 归 0.11.3，H07 / H08 的两条误报修复归 0.11.2。
 > - 理由：**0.3.0 / 0.3.1 / 0.3.2 没有独立章节**（内容都还堆在 `[Unreleased]` 里，事后无从回溯哪个版本动了什么）。
 >   那次恰好一口气给 JSON 加了五个字段而无人可察 —— 消费方只能靠猜。版本记录是契约变更唯一的审计落点，
 >   没有它，`apiVersion` 也只是一句口号。
 
 ## [Unreleased]
+
+（暂无）
+
+## [0.12.0] - 2026-11-15
+
+> **破坏性（配置面）**：`exceptions` / `adviceAllow` 的 0 命中现在直接失败（R-171）；
+> S27 默认预算改为开启（R-169），可能开始报出此前漏掉的目录；S47 是新红线（R-170），
+> H14 默认关闭（R-172）。报告格式 / 退出码语义 / `apiVersion` 不变；迁移见各小节。
 
 ### Changed（R-164：S16 体积阈值改按**代码行**判）
 
@@ -146,30 +156,7 @@
 - 确实要保留的注释（许可证头）用 `exceptions` 声明 H14。夹具 `__fixtures__/comments`；
   单测 `tests/hygiene-comments.test.mjs`。见 R-172、DESIGN §5.5。
 
-### Added（R-154：自定义 capability —— 宿主可以登记本体没有的能力）
-
-- `deps({ capabilities })` 的值除字符串（`{ datetime: 'dayjs' }`）外，新增**对象形态**：
-
-  ```js
-  deps({
-    capabilities: {
-      'http-client': {
-        preferred: 'axios',
-        syntax: ['\\bfetch\\s*\\('],
-        hint: '请求统一走 src/shared/api/client.ts 的 axios 封装',
-      },
-    },
-  })
-  ```
-
-  对象可以带 `syntax`（强指纹）或 `softSyntax` + `apiNames`（P07 的两类证据）、`platform`、`allowOwn`、`note`。
-  自定义能力与内置能力拼成**同一张生效表**：P06 / P07 / `policyConflicts` / `--render-docs` / `--verify-deps`
-  不区分来源；`fingerprints` 覆盖也可以指向自定义能力。
-
-- **配置阶段 fail-closed**：与内置能力重名（改内置证据请用 `fingerprints`）、pattern 编译不了、
-  没有证据、`apiNames` 与 `softSyntax` 不成对、缺 `hint` —— 都在 `deps()` 抛错，不留「看起来能配」的口子。
-- 新增夹具 `custom-capability`（自定义 `http-client`：裸 `fetch(` 违规必报 × import axios 的合规文件不报）
-  与解析 / P06 / P07 / 校验单测；`docs/USAGE.md`、`docs/DESIGN.md` §16.1、`PARADIGM.md` §12.2 同步。
+## [0.11.3] - 2026-10-30
 
 ### Added（R-157 / R-158：外部提供的令牌命名空间与外部消费者）
 
@@ -259,7 +246,58 @@
   `✖ 架构守卫失败：--paths 一个文件都没匹配到（本次 0 个文件被判定）`，`paths-no-match` 自述紧跟结论之后
   （附录不重复）。单测 `tests/engine-report.test.mjs` 覆盖首行与"不重复"两条。见 R-156、DESIGN §6.8(3)5。
 
+## [0.11.2] - 2026-10-29
+
+### Fixed（H07 / H08 / H09 把 `__tests__/` 当生产路径）
+
+> **误报**，不改变判定口径：判据里写的"测试文件"本来就包含 `__tests__/`（`isTestPath` 的注释与
+> H09 的 hint 都这么写），只是这三条规则各自留了一份只认 `.test.` 的正则。
+
+- 三条规则改用引擎里**唯一**的 `isTestPath`（`src/engine/test-paths.ts`）：`.test.` / `.spec.`
+  **或**落在 `__tests__/` 里。以前 `__tests__/fake-opencli.ts` 这种夹具会被 H09 报成
+  "假数据进了生产路径"，测试里 `new Promise` + `setTimeout` 的等待会被 H07 报成假异步。
+- 夹具补一例：`__fixtures__/hygiene-context/src/shared/lib/__tests__/fake-opencli.ts`
+  （H09 不报；S15 仍按孤儿报，夹具只是不配角色）。
+
+### Fixed（H08 的私网正则把版本号当成内网地址）
+
+> **误报**，不改变判定口径：只有"少报误报"，没有"多报"。
+
+- **正则要求四段**：`10.x.x.x` / `192.168.x.x` / `172.16–31.x.x`。以前 `10` 那一支只要求三段，
+  于是 `npm@10.9.4`、`pkg@10.2.7` 这类版本号会被当成 `10.x.x.x` 报 H08（实测拦过一条启动页夹具文案）。
+- **夹具补正反两例**（`__fixtures__/hygiene-context`）：`datetime.ts` 里的 `装本地 npm@10.9.4`
+  **不**报；`timers.ts` 里的 `10.12.0.5` 照报 —— 正例防"把正则收得什么都不认"。
+
+## [0.11.1] - 2026-10-25
+
+### Added（R-154：自定义 capability —— 宿主可以登记本体没有的能力）
+
+- `deps({ capabilities })` 的值除字符串（`{ datetime: 'dayjs' }`）外，新增**对象形态**：
+
+  ```js
+  deps({
+    capabilities: {
+      'http-client': {
+        preferred: 'axios',
+        syntax: ['\\bfetch\\s*\\('],
+        hint: '请求统一走 src/shared/api/client.ts 的 axios 封装',
+      },
+    },
+  })
+  ```
+
+  对象可以带 `syntax`（强指纹）或 `softSyntax` + `apiNames`（P07 的两类证据）、`platform`、`allowOwn`、`note`。
+  自定义能力与内置能力拼成**同一张生效表**：P06 / P07 / `policyConflicts` / `--render-docs` / `--verify-deps`
+  不区分来源；`fingerprints` 覆盖也可以指向自定义能力。
+
+- **配置阶段 fail-closed**：与内置能力重名（改内置证据请用 `fingerprints`）、pattern 编译不了、
+  没有证据、`apiNames` 与 `softSyntax` 不成对、缺 `hint` —— 都在 `deps()` 抛错，不留「看起来能配」的口子。
+- 新增夹具 `custom-capability`（自定义 `http-client`：裸 `fetch(` 违规必报 × import axios 的合规文件不报）
+  与解析 / P06 / P07 / 校验单测；`docs/USAGE.md`、`docs/DESIGN.md` §16.1、`PARADIGM.md` §12.2 同步。
+
 ## [0.11.0] - 2026-10-08
+
+- 2026-10-08
 
 > **契约与迁移（这一版必读 —— 退出码语义扩展 + 运行时依赖 2 → 8）**
 >
@@ -351,26 +389,6 @@
   `#ff5a1f` 是同一个色值；`var()` 别名与 `color-mix()` 照旧不算（前者是官方推荐的共用方式）。
 - **运行时依赖 7 → 8**（culori，自身 0 依赖、MIT；**不自带类型声明**，`@types/culori` 走 devDep）。
   新夹具 `contrast-syntax`（夹具数 97 → 98）。
-
-### Fixed（H07 / H08 / H09 把 `__tests__/` 当生产路径）
-
-> **误报**，不改变判定口径：判据里写的"测试文件"本来就包含 `__tests__/`（`isTestPath` 的注释与
-> H09 的 hint 都这么写），只是这三条规则各自留了一份只认 `.test.` 的正则。
-
-- 三条规则改用引擎里**唯一**的 `isTestPath`（`src/engine/test-paths.ts`）：`.test.` / `.spec.`
-  **或**落在 `__tests__/` 里。以前 `__tests__/fake-opencli.ts` 这种夹具会被 H09 报成
-  "假数据进了生产路径"，测试里 `new Promise` + `setTimeout` 的等待会被 H07 报成假异步。
-- 夹具补一例：`__fixtures__/hygiene-context/src/shared/lib/__tests__/fake-opencli.ts`
-  （H09 不报；S15 仍按孤儿报，夹具只是不配角色）。
-
-### Fixed（H08 的私网正则把版本号当成内网地址）
-
-> **误报**，不改变判定口径：只有"少报误报"，没有"多报"。
-
-- **正则要求四段**：`10.x.x.x` / `192.168.x.x` / `172.16–31.x.x`。以前 `10` 那一支只要求三段，
-  于是 `npm@10.9.4`、`pkg@10.2.7` 这类版本号会被当成 `10.x.x.x` 报 H08（实测拦过一条启动页夹具文案）。
-- **夹具补正反两例**（`__fixtures__/hygiene-context`）：`datetime.ts` 里的 `装本地 npm@10.9.4`
-  **不**报；`timers.ts` 里的 `10.12.0.5` 照报 —— 正例防"把正则收得什么都不认"。
 
 ### Fixed（R-152：覆盖率产物读不懂时的**静默 0%** / 幻影文件）
 
