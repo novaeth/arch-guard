@@ -163,6 +163,9 @@ export default {
   ],
 
   overrides: {
+    // 这份样板用注释讲每条声明对应的 R 编号 —— 显式不采用「零注释」。
+    // H14 默认开启（R-173）：想采用的项目删掉这一行即可，finding 会指出从哪条注释开始删。
+    disable: ['H14'],
     // 测试层也要进契约扫描域：否则 `e2e/**` / `tests/**` 不在文件集里，M10 会把落点当成空的
     include: ['src/**', 'e2e/**', 'tests/**'],
     ignore: ['dist/**', 'coverage/**'],

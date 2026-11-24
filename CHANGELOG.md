@@ -19,7 +19,18 @@
 
 ## [Unreleased]
 
-（暂无）
+### Changed（R-173「零注释」H14 改为默认开启）
+
+> **破坏性（默认行为）**：引入 `hygiene()` 的项目现在默认会因任何注释（包括许可证头）报 error。
+> 迁移：整条不要 → `overrides.disable: ['H14']`（报告明列停用）；只放某些文件 → `overrides.exceptions`。
+> `apiVersion` / 报告格式 / 退出码语义不变；`params.noComments` 不再被读取（写 `true` 的删掉即可，
+> 以前写 `false` 表达「不跑」的改用 `disable: ['H14']`）。
+
+- H14 去掉 `requires: ['structure.noComments']`：不再需要 `params: { noComments: true }` 才跑。
+- 规则 hint 与 finding 文案改为「默认禁止注释」，并给出 `disable` / `exceptions` 两条退出通道。
+- 夹具 `__fixtures__/comments` 去掉 `params`（证明默认开）；示例 `full` / `full-fsd` 显式 `disable: ['H14']`
+  （样板用注释讲 R 编号），`minimal` 无注释、H14 默认跑（72/109 → 73/109）。
+- 见 R-173、DESIGN §5.5、USAGE §1.1 / §2.2。
 
 ## [0.12.0] - 2026-11-15
 

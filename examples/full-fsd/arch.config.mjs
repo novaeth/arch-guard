@@ -157,6 +157,8 @@ export default {
         reason: 'pages/crews/lib/format.ts 依赖 dayjs；示例不装依赖，行为测试留给真实项目',
       },
     ],
+    // 这份样板用注释讲每条声明对应的 R 编号 —— 显式不采用「零注释」（H14 默认开启，R-173）。
+    disable: ['H14'],
     include: ['src/**'],
     // `fsd()` 已经把切片维度那套声明给全了；这里只补它没声明的
     structure: {

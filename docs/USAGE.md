@@ -75,7 +75,7 @@ export default {
 | `ignore`             | `string[]`                           | **别碰**：不进文件集、不解析、不进依赖图（构建产物 / 示例 / 夹具 / 一次性 spike 用这个）                                                                                                                       |
 | `addRoles`           | `RoleDescriptor[]`                   | 在范式角色表**之上追加**角色（项目自己的目录 / dev-only 形态靠它）                                                                                                                                             |
 | `roles`              | `RoleDescriptor[]`                   | **整体替换**范式角色表（自写范式才用；随手写会把自己范式的角色全删掉）                                                                                                                                         |
-| `params`             | `Record<string, unknown>`            | 落点参数（`styleDir` / `i18nDir` / `paletteFile`…）。预设参数最终都并到这里；H14「禁止注释」用 `{ noComments: true }` 显式开启                                                                                 |
+| `params`             | `Record<string, unknown>`            | 落点参数（`styleDir` / `i18nDir` / `paletteFile`…）。预设参数最终都并到这里                                                                                                                                    |
 | `exceptions`         | `{ rule, glob, reason, expires? }[]` | **规则级例外**（唯一的宽松通道；见 §5）                                                                                                                                                                        |
 | `aliases`            | `Record<string, string>`             | 别名映射（默认从 `tsconfig.json` 的 `paths` 读）                                                                                                                                                               |
 | `enable` · `disable` | `string[] \| 'all'`                  | 规则开关（`disable` 在 `enable` 求完之后再减）。**`disable` 是整条关掉** → 报告会自述停用了哪几条；只想对某类文件豁免，用 `exceptions`（要理由，可写到到期）                                                   |
@@ -97,11 +97,11 @@ export default {
 
 ## 2. 从 5 行开始（渐进接入）
 
-**别一上来就照着 `examples/full` 抄 210 行**。这条路径是有顺序的：
+**别一上来就照着 `examples/full` 抄 213 行**。这条路径是有顺序的：
 
 | 步  | 做什么                                                                                                                                     | 你会得到             |
 | --- | ------------------------------------------------------------------------------------------------------------------------------------------ | -------------------- |
-| ①   | 抄 [`examples/minimal`](../examples/minimal/) 的 **5 行**（范式 + 反退化 + 声明空 kit）                                                    | 72/109 规则在跑，绿  |
+| ①   | 抄 [`examples/minimal`](../examples/minimal/) 的 **5 行**（范式 + 反退化 + 声明空 kit）                                                    | 73/109 规则在跑，绿  |
 | ②   | **看报告的停用清单**：它会说"因能力未声明而停用 N 条"，并**给出可以直接粘进配置的那一行**                                                  | 每补一行，覆盖多一层 |
 | ③   | 被某条规则拦到时，按 finding 的 `hint` 把调用收进声明的落点                                                                                | 纪律开始真的生效     |
 | ④   | 想要"配全长什么样"的终点形态，再看 [`examples/full`](../examples/full/)（canonical）或 [`examples/full-fsd`](../examples/full-fsd/)（FSD） | 103/109 与 93/109    |
@@ -178,12 +178,12 @@ export default {
 | `copy({…})`         | C   | `messageApis` · `messageProps`（C01 的"组件库调用里的文案"那一半）—— **可以不写**：`uiKit(antdKit())` 自带 antd 那份；写了就以项目为准（`[]` = 关掉）                                                                                                                                                                    |
 | `deps({…})`         | P   | `allow`（fail-closed 白名单 → P01）· `deny` · `capabilities`（能力→首选方案 → P06，如 `{ datetime: 'dayjs' }`；值可以是**对象形态**登记自定义能力，见下）· `unusedDeps`（P08，默认关）· `fingerprints`                                                                                                                   |
 | `metrics({…})`      | M   | `coverage`（`report` / `perDirMin` / `zeroAllow` / `ratchet` / `baselineFile` / `mustCover` / `pathRewrite`）· `tests` · `depsBudget`                                                                                                                                                                                    |
-| `hygiene()`         | H   | 无参数（H06 / H07 / H08 / H09 / H12 / H13，按能力协商）；H14「禁止注释」默认关闭，需另写 `params: { noComments: true }`                                                                                                                                                                                                  |
+| `hygiene()`         | H   | 无参数（H06 / H07 / H08 / H09 / H12 / H13，按能力协商）；**H14「禁止注释」默认开启**，不需要额外参数                                                                                                                                                                                                                     |
 
-> **H14 禁止注释（默认关闭）**：`hygiene()` 只是把它放进名单；还要声明
-> `overrides.params: { noComments: true }` 才会真的判。没声明时报告里明列「能力未声明：structure.noComments」，
-> 不是静默通过。**TS / JS（同一源码家族）与 CSS / SCSS / Less 都判**；生成物（`structure.generated`）与测试脚手架不计；
-> 许可证头这类确实要留的注释用 `exceptions: [{ rule: 'H14', glob, reason }]`。
+> **H14 禁止注释（默认开启）**：引入 `hygiene()` 就会判 —— **TS / JS（同一源码家族）与 CSS / SCSS / Less 都判**；
+> 生成物（`structure.generated`）与测试脚手架不计。要保留注释的项目显式退出：
+> 整条不要 → `overrides.disable: ['H14']`（报告会明列「显式停用」）；只放某些文件（许可证头等）→
+> `exceptions: [{ rule: 'H14', glob, reason }]`。
 
 **自定义能力**（R-154）：`capabilities` 的值可以是对象 —— 首选方案 + 证据 + hint，用来登记本体没有的能力：
 
@@ -730,7 +730,7 @@ arch-guard --check-docs     # 只校验：不一致即红
 | 任务                             | 怎么做                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
 | -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | **新项目从零接入**               | ① 选范式（`canonical` / `library` / `fsd`）② 加域预设（`designSystem` / `copy` / `deps` / `metrics` / `hygiene`）③ 加方案面（`uiKit` / `i18n` …）④ 补 `params` 落点 ⑤ 进 CI ⑥ `--render-docs` 同步文档                                                                                                                                                                                                                                                                                                                                     |
-| **想看「配全」长什么样**         | 两份对称的活样板：[`examples/full/`](../examples/full/)（`canonical()` 三根拓扑，**103/109 在跑**）与 [`examples/full-fsd/`](../examples/full-fsd/)（`fsd()` 六层切片，**93/109**）。两者都是 0 finding；差的那几条：M02–M06 覆盖率五条要一份比 HEAD 新的产物（入库的必然过期，本仓自己也不声明 `coverage`），FSD 另有 S13 / S37 明列停用 + 8 条应用专属规则不适用。最短可用看 [`examples/minimal/`](../examples/minimal/)（72/109）                                                                                                       |
+| **想看「配全」长什么样**         | 两份对称的活样板：[`examples/full/`](../examples/full/)（`canonical()` 三根拓扑，**103/109 在跑**）与 [`examples/full-fsd/`](../examples/full-fsd/)（`fsd()` 六层切片，**93/109**）。两者都是 0 finding；差的那几条：M02–M06 覆盖率五条要一份比 HEAD 新的产物（入库的必然过期，本仓自己也不声明 `coverage`），两份 full 都显式 `disable: ['H14']`（样板用注释讲 R 编号；H14 默认开启，R-173），FSD 另有 S13 / S37 明列停用 + 8 条应用专属规则不适用。最短可用看 [`examples/minimal/`](../examples/minimal/)（73/109，H14 默认在跑）        |
 | **已有项目接入（存量很多违规）** | 没有基线可刷：先用 `include` 把契约域**收窄到已经守得住的部分**，再逐块放开；`--explain` 先问清落点；确实不适用的写 `exceptions`（带理由）                                                                                                                                                                                                                                                                                                                                                                                                 |
 | **换组件库 / 不用组件库**        | 改 `uiKit(antdKit() → 你的 kit → noneKit())` 一行；适配器约 30 行（`packages` / `vendorSelectors` / `detachedApis` / `examples`）。**换完旧库残留一条不剩**是可判定验收条件                                                                                                                                                                                                                                                                                                                                                                |
 | **换 i18n / 不用 i18n**          | `i18n(i18nextKit({…}) → 你的 kit → noneI18nKit())`；不用 i18n 时 C 域整体不注册                                                                                                                                                                                                                                                                                                                                                                                                                                                            |

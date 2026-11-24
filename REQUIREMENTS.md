@@ -482,7 +482,7 @@
 
 ## 七、后补的需求（按疼度排序）
 
-> **开着的：没有了**（`进行中` 0）—— 全部条目都已定：`已完成` 158 · `已委派` 4 · `不做` 7（R-04 / R-49 / R-50 / R-51 / R-52 / R-53 / R-109）。
+> **开着的：没有了**（`进行中` 0）—— 全部条目都已定：`已完成` 159 · `已委派` 4 · `不做` 7（R-04 / R-49 / R-50 / R-51 / R-52 / R-53 / R-109）。
 > **已撤**：R-30 复杂度 · R-70 抑制注释 · **R-94（analytics 面 kit 化）** —— 编号登记在第八节，不复用（见 N-06 / N-07 / N-13）。
 > 本节是**后补的一批**（含已完成与判不做的），按疼度排序；更早的按主题分散在一~六节。
 
@@ -1822,7 +1822,7 @@ messageProps: ['message', 'description', 'title'] })` —— 这两张表是 **a
   `src/engine/report.ts`（去掉"未命中"分支）；单测 `tests/exceptions.test.mjs` / `tests/advice.test.mjs`；
   `docs/USAGE.md` §5、`PARADIGM.md` §7、`docs/DESIGN.md` §6.6、`CONTEXT.md` 同步；CHANGELOG `[Unreleased]`
 
-**R-172 禁止注释（默认关闭）** · 已完成 · 本体（H14 + `params.noComments`）
+**R-172 禁止注释（曾默认关闭，R-173 起改为默认开启）** · 已完成 · 本体（H14）
 
 - **长这样**：团队要求代码只靠命名与类型表达，AI 却爱写"// 导入 x"这类噪声注释；或者反过来，
   团队想保留许可证头、但禁止其余注释
@@ -1835,6 +1835,22 @@ messageProps: ['message', 'description', 'title'] })` —— 这两张表是 **a
   `src/presets/hygiene.ts`（放进名单，能力未声明时停用）；夹具 `__fixtures__/comments`
   （有注释必报 × 无注释不报）；单测 `tests/hygiene-comments.test.mjs`；
   `docs/DESIGN.md` §5.5、`docs/USAGE.md` §2 同步；CHANGELOG `[Unreleased]`
+- **后续**：R-173 删除了能力门与 `params.noComments`，H14 改为默认开启；本条保留当时的默认关闭决策作为历史。
+
+**R-173 「零注释」改为默认开启** · 已完成 · 本体（H14 去掉能力门）
+
+- **长这样**：团队已经在 `arch.config.mjs` 里用了 `hygiene()`，读到规则清单里的 H14「禁止注释」，以为注释已经被拦；
+  但 H14 的 `requires: structure.noComments` 没有声明（谁也不知道还要写 `params: { noComments: true }`），
+  AI 每轮继续加「// 导入 x」，门禁全绿。
+- **会怎样**：一条写在规则表里的红线默认不跑，只靠报告末尾一行「能力未声明」提示；而它要防的正是 AI 的噪声注释 ——
+  漏掉的后果恰好是它存在的理由。默认值也是设计：多数团队第一次接入时不会去翻"这条为什么没跑"。
+- **期望**：H14 **默认开启**：删掉 `requires: ['structure.noComments']` 与 `params.noComments` 这个开关，
+  `hygiene()` 一引入就判。要保留注释的项目用 `disable: ['H14']`（报告明列停用）或按文件 `exceptions`，
+  不新增「注释分类」；本仓两份 `full` 示例因为用注释讲 R 编号，显式 `disable: ['H14']`。
+- **落地**：`src/packs/core/rules/hygiene-comments.ts`（去掉 requires / 默认开的文案）· `src/presets/hygiene.ts` ·
+  `__fixtures__/comments/arch.config.mjs`（去掉 params）· `examples/full` / `examples/full-fsd`（disable）·
+  单测 `tests/hygiene-comments.test.mjs` / `tests/stack.test.mjs` / `tests/examples.test.mjs`；
+  `docs/DESIGN.md` §5.5、`docs/USAGE.md` §1.1/§2.2、`AGENTS.md` 示例度量同步；CHANGELOG `[Unreleased]`
 
 ## 八、不做（写在这里是为了不再重复讨论）
 

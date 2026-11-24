@@ -65,14 +65,14 @@ test('stack()：一切都由选项传入；落点仍由范式声明（换范式�
   assert.equal(fsdConfig.params.styleDir, 'src/app/styles', 'FSD 自己的落点（全局样式）')
 })
 
-test('stack()：组合出来的规则集 = 各域的并集；能力齐了就只剩「默认关闭」的 H14 停用', async () => {
+test('stack()：组合出来的规则集 = 各域的并集；能力齐了就没有「默认关掉」的规则', async () => {
   const config = await load(
     `canonical(), ${stackWith(
       "{ i18n: i18nextKit({ languages: ['zh-CN', 'en'] }), uiKit: antdKit(), deps: { allow: ['react', 'antd'] }, metrics: { coverage: { path: 'coverage/coverage-final.json', format: 'istanbul-json' } } }",
     )}`,
   )
   const ids = enabledIds(config)
-  for (const id of ['C02', 'C03', 'C07', 'D10', 'D10b', 'D17', 'P01', 'P11', 'H06']) {
+  for (const id of ['C02', 'C03', 'C07', 'D10', 'D10b', 'D17', 'P01', 'P11', 'H06', 'H14']) {
     assert.ok(ids.includes(id), `${id} 应该在组合里启用`)
   }
   // i18n 与组件库的能力都声明了 → 不因能力缺失而停用
@@ -84,7 +84,7 @@ test('stack()：组合出来的规则集 = 各域的并集；能力齐了就只�
   // S36 / S37 / S38 / S46 **明列停用**（不是静默通过）；
   // 注意 D28（样式入口）**在跑**：`styleDir` 由范式给，只是这个 fixture 里没有 CSS 文件可判。
   // 另外两条需要更具体的项目声明（M08 tests.requireTestsFor / M09 checkChain / M10 tests.homes）；
-  // H14「禁止注释」是**默认关闭**（R-172），要 params.noComments 才跑。
+  // H14「禁止注释」自 R-173 起默认开启，能力齐时它在跑，不该出现在停用清单里。
   assert.deepEqual(skippedIds(config).sort(), [
     'D02',
     'D18',
@@ -97,7 +97,6 @@ test('stack()：组合出来的规则集 = 各域的并集；能力齐了就只�
     'D27',
     'D29',
     'D30',
-    'H14',
     'M08',
     'M09',
     'M10',

@@ -21,8 +21,8 @@ const comments = [
   { line: 5, text: '/* b */', kind: 'block', pos: 2, end: 3 },
 ]
 
-test('H14 默认关闭：requires structure.noComments（params.noComments 显式开启）', () => {
-  assert.deepEqual(rule.requires, ['structure.noComments'])
+test('H14 默认开启：没有能力门（hygiene() 引入即判；R-173）', () => {
+  assert.equal(rule.requires, undefined)
 })
 
 test('H14 禁止注释：TS / JS 家族与 CSS 都判；无注释 / 生成物不报', () => {

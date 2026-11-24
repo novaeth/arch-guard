@@ -5,11 +5,11 @@ import { globToRegExp } from '../../../engine/util.js'
 import { finding } from './structure-util.js'
 
 /**
- * **H14 禁止注释**（R-172，默认关闭）。
+ * **H14 禁止注释**（R-172，R-173 起**默认开启**）。
  *
  * 场景：团队认为注释会腐烂（尤其是 AI 写的"// 导入 x"这类噪声），要求代码只靠命名与类型表达。
- * 这是**项目口味**而不是通用不变量，所以默认关闭 —— 用 `params: { noComments: true }` 显式开启；
- * 没声明时 `requires` 让它在报告里明列停用（不是静默空转）。
+ * 它是**项目口味**，但默认值站在"禁注释"这一侧：`hygiene()` 一引入就判，保留注释才是显式决定 ——
+ * 整条不想要写 `overrides.disable: ['H14']`（报告明列停用），个别文件用 `exceptions`。
  *
  * 边界：
  * - 判 **ts / js 家族与 css**（`.ts` / `.tsx` / `.mts` / `.cts` / `.js` / `.jsx` / `.mjs` / `.cjs`
@@ -23,10 +23,9 @@ export const noComments: Rule = {
   domain: 'hygiene',
   level: 'L2',
   severity: 'error',
-  requires: ['structure.noComments'],
   appliesTo: 'product',
   title: '禁止注释',
-  hint: '本项目声明了「禁止注释」：删掉注释；确实要保留的（许可证头 / 生成物）用 overrides.exceptions 声明 H14 并写 reason',
+  hint: '本项目禁止注释（H14 默认开启）：删掉注释；确实要保留的（许可证头 / 特殊指令）用 overrides.exceptions 声明 H14 并写 reason；整个项目不采用零注释则 overrides.disable: ["H14"]',
   run: (ctx) => {
     const generated = (ctx.config.structure.generated ?? []).map(globToRegExp)
     const out: Finding[] = []
@@ -45,8 +44,8 @@ export const noComments: Rule = {
           'H14',
           record.rel,
           first,
-          `文件里有 ${comments.length} 条注释（第一条在第 ${first.line} 行）：本项目声明了「禁止注释」`,
-          '删掉注释；确实要保留的（许可证头 / 生成物）用 exceptions 声明 H14 并写 reason',
+          `文件里有 ${comments.length} 条注释（第一条在第 ${first.line} 行）：H14 默认禁止注释`,
+          '删掉注释；确实要保留的（许可证头 / 特殊指令）用 exceptions 声明 H14 并写 reason（整个项目不采用零注释则 disable: ["H14"]）',
         ),
       )
     }
